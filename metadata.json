@@ -1,0 +1,6 @@
+{
+  "name": "Bill & Subscription Tracker",
+  "description": "A comprehensive, modern utility tracker to manage your monthly payments, bills, and automatic subscriptions with reminders and a dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

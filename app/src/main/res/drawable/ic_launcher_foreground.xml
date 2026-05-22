@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Centered safe zone card/receipt icon -->
+    <path
+        android:fillColor="#E1BEE7"
+        android:pathData="M26,32 h56 a4,4 0 0 1 4,4 v36 a4,4 0 0 1 -4,4 h-56 a4,4 0 0 1 -4,-4 v-36 a4,4 0 0 1 4,-4 z" />
+    
+    <!-- Magnetic strip of credit card -->
+    <path
+        android:fillColor="#311B92"
+        android:pathData="M22,40 h64 v8 h-64 z" />
+        
+    <!-- Small chip of credit card -->
+    <path
+        android:fillColor="#FFD54F"
+        android:pathData="M30,52 h8 v6 h-8 z" />
+
+    <!-- Glowing check symbol of paid bills -->
+    <path
+        android:fillColor="#4CAF50"
+        android:pathData="M48,66 l-8,-8 l2.5,-2.5 l5.5,5.5 l12.5,-12.5 l2.5,2.5 z" />
+
+    <!-- Gold coin representing subscription cash flow -->
+    <path
+        android:fillColor="#FFC107"
+        android:pathData="M70,62 A5,5 0 1 1 60,62 A5,5 0 1 1 70,62" />
+</vector>
