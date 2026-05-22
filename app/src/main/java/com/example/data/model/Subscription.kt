@@ -2,8 +2,10 @@ package com.example.data.model
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
+import java.util.Locale
 
 @Entity(tableName = "subscriptions")
 data class Subscription(
@@ -47,5 +49,31 @@ data class Subscription(
             else -> calendar.add(Calendar.MONTH, 1) // Monthly
         }
         return calendar.timeInMillis
+    }
+
+    // Check if subscription has renewal due or occurs in a given monthYear ("yyyy-MM")
+    fun isDueInMonthYear(monthYear: String): Boolean {
+        if (!isActive) return false
+        
+        val sdf = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+        val targetDate = try { sdf.parse(monthYear) } catch (e: Exception) { null } ?: return false
+        val targetCal = Calendar.getInstance().apply { time = targetDate }
+        
+        val renewalCal = Calendar.getInstance().apply { timeInMillis = renewalDate }
+        
+        val targetMonthCount = targetCal.get(Calendar.YEAR) * 12 + targetCal.get(Calendar.MONTH)
+        val renewalMonthCount = renewalCal.get(Calendar.YEAR) * 12 + renewalCal.get(Calendar.MONTH)
+        
+        // If the target month is prior to current renewal month, then it is not yet due
+        if (targetMonthCount < renewalMonthCount) {
+            return false
+        }
+        
+        val diffMonths = targetMonthCount - renewalMonthCount
+        return when (billingCycle) {
+            "Yearly" -> diffMonths % 12 == 0
+            "Quarterly" -> diffMonths % 3 == 0
+            else -> true // Monthly
+        }
     }
 }

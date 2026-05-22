@@ -23,11 +23,6 @@ data class Bill(
 ) {
     // Helper to check if this bill is due in a selected month-year
     fun isDueInMonthYear(monthYear: String): Boolean {
-        if (billingCycle == "One-time" || billingCycle == "One-Time") {
-            return monthYear == startMonthYear
-        }
-        if (billingCycle == "Monthly") return true
-        
         val sdf = SimpleDateFormat("yyyy-MM", Locale.getDefault())
         val startDate = try { sdf.parse(startMonthYear) } catch (e: Exception) { null } ?: return true
         val selectedDate = try { sdf.parse(monthYear) } catch (e: Exception) { null } ?: return true
@@ -40,6 +35,11 @@ data class Bill(
         
         val diffMonths = selectedMonthCount - startMonthCount
         if (diffMonths < 0) return false // Due starting from startMonthYear
+
+        if (billingCycle == "One-time" || billingCycle == "One-Time") {
+            return monthYear == startMonthYear
+        }
+        if (billingCycle == "Monthly") return true
         
         return when (billingCycle) {
             "Quarterly" -> diffMonths % 3 == 0

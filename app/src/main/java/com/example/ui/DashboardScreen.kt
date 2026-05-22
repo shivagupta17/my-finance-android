@@ -788,8 +788,8 @@ fun DashboardScreen(
     val forecastedItems = remember(bills, subscriptions, billPayments, nextMonthYearStr) {
         val list = mutableListOf<Pair<String, Double>>()
         
-        // Active Subscriptions
-        subscriptions.filter { it.isActive }.forEach {
+        // Active Subscriptions due next month
+        subscriptions.filter { it.isDueInMonthYear(nextMonthYearStr) }.forEach {
             list.add(Pair(it.name + " (Sub)", it.amount))
         }
 

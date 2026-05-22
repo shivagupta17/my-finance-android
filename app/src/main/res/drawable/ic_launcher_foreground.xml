@@ -1,31 +1,114 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Centered safe zone card/receipt icon -->
-    <path
-        android:fillColor="#E1BEE7"
-        android:pathData="M26,32 h56 a4,4 0 0 1 4,4 v36 a4,4 0 0 1 -4,4 h-56 a4,4 0 0 1 -4,-4 v-36 a4,4 0 0 1 4,-4 z" />
-    
-    <!-- Magnetic strip of credit card -->
-    <path
-        android:fillColor="#311B92"
-        android:pathData="M22,40 h64 v8 h-64 z" />
-        
-    <!-- Small chip of credit card -->
-    <path
-        android:fillColor="#FFD54F"
-        android:pathData="M30,52 h8 v6 h-8 z" />
 
-    <!-- Glowing check symbol of paid bills -->
+    <!-- Glowing circular outer ring (Material 3 Adaptive Boundary representation) -->
     <path
-        android:fillColor="#4CAF50"
-        android:pathData="M48,66 l-8,-8 l2.5,-2.5 l5.5,5.5 l12.5,-12.5 l2.5,2.5 z" />
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M 54, 21 A 33,33 0 1,1 53.9,21">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:endX="87"
+                android:endY="87"
+                android:startX="21"
+                android:startY="21"
+                android:type="linear">
+                <item
+                    android:color="#EADDFF"
+                    android:offset="0.0" />
+                <item
+                    android:color="#FFD8E4"
+                    android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
 
-    <!-- Gold coin representing subscription cash flow -->
+    <!-- Translucent backing circle inside the ring to provide contrast against the background -->
     <path
-        android:fillColor="#FFC107"
-        android:pathData="M70,62 A5,5 0 1 1 60,62 A5,5 0 1 1 70,62" />
+        android:fillColor="#1D1B20"
+        android:fillAlpha="0.45"
+        android:pathData="M 54, 23 A 31,31 0 1,1 53.9,23" />
+
+    <!-- Stylized modern billing document / receipt -->
+    <!-- Centered carefully but slightly offset to fit the coin overlap elegantly -->
+    <path
+        android:pathData="M 40,33 H 58 A 3,3 0 0 1 61,36 V 61 L 59,59 L 57,61 L 55,59 L 53,61 L 51,59 L 49,61 L 47,59 L 45,61 L 43,59 L 41,61 V 36 A 3,3 0 0 1 40,33 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:endX="61"
+                android:endY="61"
+                android:startX="40"
+                android:startY="33"
+                android:type="linear">
+                <item
+                    android:color="#FFFFFF"
+                    android:offset="0.0" />
+                <item
+                    android:color="#EADDFF"
+                    android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Content lines inside receipt representing recurring items -->
+    <path
+        android:strokeColor="#6750A4"
+        android:strokeWidth="2.0"
+        android:strokeLineCap="round"
+        android:pathData="M 46, 42 H 55" />
+
+    <path
+        android:strokeColor="#6750A4"
+        android:strokeWidth="2.0"
+        android:strokeLineCap="round"
+        android:pathData="M 46, 48 H 52" />
+
+    <path
+        android:strokeColor="#7D5260"
+        android:strokeWidth="2.0"
+        android:strokeLineCap="round"
+        android:pathData="M 46, 54 H 50" />
+
+    <!-- 3D Golden coin overlapping the receipt (represents active cash flow/saving/subs) -->
+    <path
+        android:pathData="M 66, 44 A 12,12 0 1,1 65.9,44">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:endX="78"
+                android:endY="68"
+                android:startX="54"
+                android:startY="44"
+                android:type="linear">
+                <item
+                    android:color="#FFE082"
+                    android:offset="0.0" />
+                <item
+                    android:color="#FF8F00"
+                    android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Inner gold coin rim overlay for visual depth -->
+    <path
+        android:strokeColor="#FFD54F"
+        android:strokeWidth="1.2"
+        android:fillColor="#00000000"
+        android:pathData="M 66, 47 A 9,9 0 1,1 65.9,47" />
+
+    <!-- Glowing checkmark inside the coin representing paid status / track status -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M 61.5, 56 L 64.5, 59 L 70.5, 52" />
+
 </vector>
