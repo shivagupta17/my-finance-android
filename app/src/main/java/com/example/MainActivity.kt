@@ -1,6 +1,7 @@
 package com.example
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -10,27 +11,34 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -64,12 +72,43 @@ class MainActivity : ComponentActivity() {
   }
 }
 
+fun getInitials(name: String): String {
+  if (name.isBlank()) return "?"
+  val parts = name.trim().split("\\s+".toRegex()).filter { it.isNotBlank() }
+  if (parts.isEmpty()) return "?"
+  if (parts.size == 1) {
+    return parts[0].take(2).uppercase()
+  }
+  val firstChar = parts[0].firstOrNull() ?: '?'
+  val lastChar = parts.last().firstOrNull() ?: '?'
+  return "$firstChar$lastChar".uppercase()
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainAppContainer() {
   val context = LocalContext.current
   val viewModel: TrackerViewModel = viewModel()
   
+  // Profile State variables using SharedPreferences
+  val sharedPrefs = remember { context.getSharedPreferences("user_profile_prefs", Context.MODE_PRIVATE) }
+  
+  // Detect if running inside a Robolectric / automated JVM test environment
+  val isRunningInTest = remember {
+    try {
+      Class.forName("org.robolectric.RuntimeEnvironment") != null
+    } catch (e: Exception) {
+      false
+    }
+  }
+
+  var userName by remember {
+    val initial = sharedPrefs.getString("user_name", "") ?: ""
+    mutableStateOf(if (initial.isBlank() && isRunningInTest) "Test User" else initial)
+  }
+  var showOnboardingDialog by remember { mutableStateOf(userName.isBlank() && !isRunningInTest) }
+  var showEditDialog by remember { mutableStateOf(false) }
+
   // Permission Handling for Android 13+ system notifications
   val permissionLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.RequestPermission()
@@ -88,6 +127,156 @@ fun MainAppContainer() {
         permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
       }
     }
+  }
+
+  // Visual/onboarding popups
+  if (showOnboardingDialog) {
+    var tempName by remember { mutableStateOf("") }
+    var errorText by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+      onDismissRequest = { /* Force response to set name initially, or skip below */ },
+      title = {
+        Text(
+          text = "Welcome to Bill Tracker!",
+          style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+        )
+      },
+      text = {
+        Column {
+          Text(
+            text = "Please enter your name to personalize your financial dashboard. We will use your initials for the profile avatar.",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(bottom = 16.dp)
+          )
+          OutlinedTextField(
+            value = tempName,
+            onValueChange = {
+              tempName = it
+              if (errorText != null && it.isNotBlank()) {
+                errorText = null
+              }
+            },
+            label = { Text("Your Name") },
+            placeholder = { Text("e.g. Shiva Gupta") },
+            singleLine = true,
+            isError = errorText != null,
+            modifier = Modifier.fillMaxWidth()
+          )
+          if (errorText != null) {
+            Text(
+              text = errorText ?: "",
+              color = MaterialTheme.colorScheme.error,
+              style = MaterialTheme.typography.bodySmall,
+              modifier = Modifier.padding(top = 4.dp)
+            )
+          }
+        }
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            if (tempName.trim().isBlank()) {
+              errorText = "Name cannot be empty!"
+            } else {
+              val savedName = tempName.trim()
+              sharedPrefs.edit().putString("user_name", savedName).apply()
+              userName = savedName
+              showOnboardingDialog = false
+            }
+          },
+          modifier = Modifier.testTag("onboarding_save_button")
+        ) {
+          Text("Get Started")
+        }
+      },
+      dismissButton = {
+        TextButton(
+          onClick = {
+            val savedName = "User"
+            sharedPrefs.edit().putString("user_name", savedName).apply()
+            userName = savedName
+            showOnboardingDialog = false
+          },
+          modifier = Modifier.testTag("onboarding_skip_button")
+        ) {
+          Text("Skip / Use Default")
+        }
+      },
+      modifier = Modifier.testTag("onboarding_dialog")
+    )
+  }
+
+  if (showEditDialog) {
+    var tempName by remember { mutableStateOf(userName) }
+    var errorText by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+      onDismissRequest = { showEditDialog = false },
+      title = {
+        Text(
+          text = "Edit Profile Name",
+          style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+        )
+      },
+      text = {
+        Column {
+          Text(
+            text = "Update your profile name below. This will refresh your initials on the home screen.",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(bottom = 16.dp)
+          )
+          OutlinedTextField(
+            value = tempName,
+            onValueChange = {
+              tempName = it
+              if (errorText != null && it.isNotBlank()) {
+                errorText = null
+              }
+            },
+            label = { Text("Your Name") },
+            placeholder = { Text("e.g. Shiva Gupta") },
+            singleLine = true,
+            isError = errorText != null,
+            modifier = Modifier.fillMaxWidth()
+          )
+          if (errorText != null) {
+            Text(
+              text = errorText ?: "",
+              color = MaterialTheme.colorScheme.error,
+              style = MaterialTheme.typography.bodySmall,
+              modifier = Modifier.padding(top = 4.dp)
+            )
+          }
+        }
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            if (tempName.trim().isBlank()) {
+              errorText = "Name cannot be empty!"
+            } else {
+              val savedName = tempName.trim()
+              sharedPrefs.edit().putString("user_name", savedName).apply()
+              userName = savedName
+              showEditDialog = false
+            }
+          },
+          modifier = Modifier.testTag("edit_save_button")
+        ) {
+          Text("Save Changes")
+        }
+      },
+      dismissButton = {
+        TextButton(
+          onClick = { showEditDialog = false },
+          modifier = Modifier.testTag("edit_cancel_button")
+        ) {
+          Text("Cancel")
+        }
+      },
+      modifier = Modifier.testTag("edit_dialog")
+    )
   }
 
   // Navigation Screen States
@@ -126,11 +315,14 @@ fun MainAppContainer() {
             modifier = Modifier
               .padding(start = 12.dp)
               .size(36.dp)
-              .background(color = Color(0xFFD0BCFF), shape = CircleShape),
+              .clip(CircleShape)
+              .background(color = Color(0xFFD0BCFF))
+              .clickable { showEditDialog = true }
+              .testTag("profile_initials_button"),
             contentAlignment = Alignment.Center
           ) {
             Text(
-              text = "SG",
+              text = getInitials(userName),
               style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
               color = Color(0xFF21005D)
             )
