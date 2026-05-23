@@ -63,4 +63,11 @@ class TrackerRepository(
 
     suspend fun deleteBillPaymentByBillIdAndMonth(billId: Int, monthYear: String) =
         billPaymentDao.deletePaymentsByBillIdAndMonth(billId, monthYear)
+
+    suspend fun clearAllData() {
+        billDao.deleteAllBills()
+        subscriptionDao.deleteAllSubscriptions()
+        subscriptionPaymentDao.deleteAllPayments()
+        billPaymentDao.deleteAllBillPayments()
+    }
 }

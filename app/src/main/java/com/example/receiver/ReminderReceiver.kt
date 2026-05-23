@@ -53,7 +53,7 @@ class ReminderReceiver : BroadcastReceiver() {
 
         // Build Notification
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_popup_reminder) // Simple system icon
+            .setSmallIcon(android.R.drawable.ic_dialog_info) // Simple system icon
             .setContentTitle(title)
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))

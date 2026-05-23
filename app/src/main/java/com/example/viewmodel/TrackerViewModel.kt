@@ -11,6 +11,8 @@ import com.example.data.model.BillPayment
 import com.example.data.repository.TrackerRepository
 import com.example.receiver.ReminderScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.json.JSONObject
+import org.json.JSONArray
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -115,8 +117,10 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
     // Combined Flow for upcoming payments dashboard lists, filtered by selectedMonthYear, chronologically sorted
     val upcomingPayments: StateFlow<List<UpcomingPaymentItem>> = combine(
         bills, 
+        subscriptions,
+        payments,
         selectedMonthYear
-    ) { billList, monthYear ->
+    ) { billList, subList, paymentList, monthYear ->
         val items = mutableListOf<UpcomingPaymentItem>()
         val currentMonthYear = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date())
         
@@ -139,6 +143,32 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
             }
         }
         
+        // Map Subscriptions (only those that are due/renewing in the selected month, and not yet paid for this cycle)
+        val sdf = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+        subList.forEach { sub ->
+            if (sub.isActive && sub.isDueInMonthYear(monthYear)) {
+                val isPaid = paymentList.any { pay ->
+                    pay.subscriptionId == sub.id && sdf.format(Date(pay.paymentDate)) == monthYear
+                }
+                if (!isPaid) {
+                    val days = sub.daysRemaining()
+                    val isOverdue = System.currentTimeMillis() > sub.renewalDate && monthYear == currentMonthYear
+                    items.add(
+                        UpcomingPaymentItem(
+                            id = sub.id,
+                            name = sub.name,
+                            amount = sub.amount,
+                            daysRemaining = days,
+                            isOverdue = isOverdue,
+                            itemType = "SUBS_RENEWAL",
+                            extraInfo = sub.paymentSource,
+                            parentItem = sub
+                        )
+                    )
+                }
+            }
+        }
+        
         // Sort: overdue first, then soonest remaining due days
         items.sortedWith(compareBy<UpcomingPaymentItem> { if (it.isOverdue) -1000 + it.daysRemaining else it.daysRemaining })
     }.stateIn(
@@ -150,8 +180,10 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
     // Combined Flow for completed payments in selectedMonthYear
     val completedPayments: StateFlow<List<UpcomingPaymentItem>> = combine(
         bills, 
+        subscriptions,
+        payments,
         selectedMonthYear
-    ) { billList, monthYear ->
+    ) { billList, subList, paymentList, monthYear ->
         val items = mutableListOf<UpcomingPaymentItem>()
         
         // Map Paid Bills
@@ -169,6 +201,30 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
                         parentItem = bill
                     )
                 )
+            }
+        }
+        
+        // Map Renewed Subscriptions
+        val sdf = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+        subList.forEach { sub ->
+            if (sub.isDueInMonthYear(monthYear)) {
+                val isPaid = paymentList.any { pay ->
+                    pay.subscriptionId == sub.id && sdf.format(Date(pay.paymentDate)) == monthYear
+                }
+                if (isPaid) {
+                    items.add(
+                        UpcomingPaymentItem(
+                            id = sub.id,
+                            name = sub.name,
+                            amount = sub.amount,
+                            daysRemaining = 0,
+                            isOverdue = false,
+                            itemType = "SUBS_RENEWAL",
+                            extraInfo = sub.paymentSource,
+                            parentItem = sub
+                        )
+                    )
+                }
             }
         }
         
@@ -438,6 +494,217 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
                 val updatedMonths = list.filter { it.isNotEmpty() }.joinToString(",")
                 repository.updateBill(bill.copy(paidMonths = updatedMonths))
             }
+        }
+    }
+
+    fun exportDataToJson(): String {
+        val backupObj = JSONObject()
+        backupObj.put("version", 1)
+        
+        // Bills
+        val billsArray = JSONArray()
+        bills.value.forEach { bill ->
+            val obj = JSONObject().apply {
+                put("id", bill.id)
+                put("name", bill.name)
+                put("amount", bill.amount)
+                put("category", bill.category)
+                put("dueDay", bill.dueDay)
+                put("customReminderDaysBefore", bill.customReminderDaysBefore)
+                put("paidMonths", bill.paidMonths)
+                put("notes", bill.notes)
+                put("billingCycle", bill.billingCycle)
+                put("startMonthYear", bill.startMonthYear)
+                put("isVariable", bill.isVariable)
+            }
+            billsArray.put(obj)
+        }
+        backupObj.put("bills", billsArray)
+        
+        // Subscriptions
+        val subsArray = JSONArray()
+        subscriptions.value.forEach { sub ->
+            val obj = JSONObject().apply {
+                put("id", sub.id)
+                put("name", sub.name)
+                put("amount", sub.amount)
+                put("billingCycle", sub.billingCycle)
+                put("paymentSource", sub.paymentSource)
+                put("platform", sub.platform)
+                put("category", sub.category)
+                put("renewalDate", sub.renewalDate)
+                put("isAutoNotify", sub.isAutoNotify)
+                put("customReminderDaysBefore", sub.customReminderDaysBefore)
+                put("isActive", sub.isActive)
+                put("notes", sub.notes)
+            }
+            subsArray.put(obj)
+        }
+        backupObj.put("subscriptions", subsArray)
+        
+        // Bill Payments
+        val billPaymentsArray = JSONArray()
+        billPayments.value.forEach { bp ->
+            val obj = JSONObject().apply {
+                put("id", bp.id)
+                put("billId", bp.billId)
+                put("billName", bp.billName)
+                put("amount", bp.amount)
+                put("paymentDate", bp.paymentDate)
+                put("monthYear", bp.monthYear)
+                put("category", bp.category)
+            }
+            billPaymentsArray.put(obj)
+        }
+        backupObj.put("billPayments", billPaymentsArray)
+        
+        // Subscription Payments
+        val subPaymentsArray = JSONArray()
+        payments.value.forEach { sp ->
+            val obj = JSONObject().apply {
+                put("id", sp.id)
+                put("subscriptionId", sp.subscriptionId)
+                put("subscriptionName", sp.subscriptionName)
+                put("amount", sp.amount)
+                put("paymentDate", sp.paymentDate)
+                put("billingCycle", sp.billingCycle)
+                put("paymentSource", sp.paymentSource)
+                put("platform", sp.platform)
+                put("category", sp.category)
+            }
+            subPaymentsArray.put(obj)
+        }
+        backupObj.put("subscriptionPayments", subPaymentsArray)
+        
+        return backupObj.toString(4)
+    }
+
+    fun importDataFromJson(jsonString: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val backupObj = JSONObject(jsonString)
+                if (!backupObj.has("version")) {
+                    onError("Invalid backup file: Missing version indicator.")
+                    return@launch
+                }
+                
+                // First cancel all existing notifications
+                bills.value.forEach { bill ->
+                    ReminderScheduler.cancelBillReminder(context, bill)
+                }
+                subscriptions.value.forEach { sub ->
+                    ReminderScheduler.cancelSubscriptionReminder(context, sub)
+                }
+                
+                // Clear existing databases
+                repository.clearAllData()
+                
+                // Parse and insert Bills
+                val billsArray = backupObj.optJSONArray("bills")
+                if (billsArray != null) {
+                    for (i in 0 until billsArray.length()) {
+                        val obj = billsArray.getJSONObject(i)
+                        val bill = Bill(
+                            id = obj.getInt("id"),
+                            name = obj.getString("name"),
+                            amount = obj.getDouble("amount"),
+                            category = obj.getString("category"),
+                            dueDay = obj.getInt("dueDay"),
+                            customReminderDaysBefore = obj.optInt("customReminderDaysBefore", 1),
+                            paidMonths = obj.optString("paidMonths", ""),
+                            notes = obj.optString("notes", ""),
+                            billingCycle = obj.optString("billingCycle", "Monthly"),
+                            startMonthYear = if (obj.has("startMonthYear")) obj.getString("startMonthYear") else SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date()),
+                            isVariable = obj.optBoolean("isVariable", false)
+                        )
+                        repository.insertBill(bill)
+                        ReminderScheduler.scheduleBillReminder(context, bill)
+                    }
+                }
+                
+                // Parse and insert Subscriptions
+                val subsArray = backupObj.optJSONArray("subscriptions")
+                if (subsArray != null) {
+                    for (i in 0 until subsArray.length()) {
+                        val obj = subsArray.getJSONObject(i)
+                        val sub = Subscription(
+                            id = obj.getInt("id"),
+                            name = obj.getString("name"),
+                            amount = obj.getDouble("amount"),
+                            billingCycle = obj.getString("billingCycle"),
+                            paymentSource = obj.getString("paymentSource"),
+                            platform = obj.getString("platform"),
+                            category = obj.getString("category"),
+                            renewalDate = obj.getLong("renewalDate"),
+                            isAutoNotify = obj.optBoolean("isAutoNotify", true),
+                            customReminderDaysBefore = obj.optInt("customReminderDaysBefore", 2),
+                            isActive = obj.optBoolean("isActive", true),
+                            notes = obj.optString("notes", "")
+                        )
+                        repository.insertSubscription(sub)
+                        if (sub.isActive && sub.isAutoNotify) {
+                            ReminderScheduler.scheduleSubscriptionReminder(context, sub)
+                        }
+                    }
+                }
+                
+                // Parse and insert Bill Payments
+                val billPaymentsArray = backupObj.optJSONArray("billPayments")
+                if (billPaymentsArray != null) {
+                    for (i in 0 until billPaymentsArray.length()) {
+                        val obj = billPaymentsArray.getJSONObject(i)
+                        val bp = BillPayment(
+                            id = obj.getInt("id"),
+                            billId = obj.getInt("billId"),
+                            billName = obj.getString("billName"),
+                            amount = obj.getDouble("amount"),
+                            paymentDate = obj.getLong("paymentDate"),
+                            monthYear = obj.getString("monthYear"),
+                            category = obj.getString("category")
+                        )
+                        repository.insertBillPayment(bp)
+                    }
+                }
+                
+                // Parse and insert Subscription Payments
+                val subPaymentsArray = backupObj.optJSONArray("subscriptionPayments")
+                if (subPaymentsArray != null) {
+                    for (i in 0 until subPaymentsArray.length()) {
+                        val obj = subPaymentsArray.getJSONObject(i)
+                        val sp = SubscriptionPayment(
+                            id = obj.getInt("id"),
+                            subscriptionId = obj.getInt("subscriptionId"),
+                            subscriptionName = obj.getString("subscriptionName"),
+                            amount = obj.getDouble("amount"),
+                            paymentDate = obj.getLong("paymentDate"),
+                            billingCycle = obj.getString("billingCycle"),
+                            paymentSource = obj.getString("paymentSource"),
+                            platform = obj.getString("platform"),
+                            category = obj.getString("category")
+                        )
+                        repository.insertPayment(sp)
+                    }
+                }
+                
+                onSuccess()
+            } catch (e: Exception) {
+                onError(e.localizedMessage ?: "Failed to parse JSON backup.")
+            }
+        }
+    }
+
+    fun clearAllData() {
+        viewModelScope.launch {
+            // Cancel reminders for current bills
+            bills.value.forEach { bill ->
+                ReminderScheduler.cancelBillReminder(context, bill)
+            }
+            // Cancel reminders for current subscriptions
+            subscriptions.value.forEach { sub ->
+                ReminderScheduler.cancelSubscriptionReminder(context, sub)
+            }
+            // Delete all tables from database
+            repository.clearAllData()
         }
     }
 }

@@ -18,6 +18,10 @@
             android:name=".receiver.ReminderReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".receiver.CriticalAlertReceiver"
+            android:exported="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

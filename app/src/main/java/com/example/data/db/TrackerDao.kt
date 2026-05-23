@@ -20,6 +20,9 @@ interface BillDao {
     @Query("SELECT * FROM bills WHERE id = :id")
     suspend fun getBillById(id: Int): Bill?
 
+    @Query("SELECT * FROM bills")
+    suspend fun getAllBillsList(): List<Bill>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertBill(bill: Bill): Long
 
@@ -28,6 +31,9 @@ interface BillDao {
 
     @Delete
     suspend fun deleteBill(bill: Bill)
+
+    @Query("DELETE FROM bills")
+    suspend fun deleteAllBills()
 }
 
 @Dao
@@ -41,6 +47,9 @@ interface SubscriptionDao {
     @Query("SELECT * FROM subscriptions WHERE id = :id")
     suspend fun getSubscriptionById(id: Int): Subscription?
 
+    @Query("SELECT * FROM subscriptions")
+    suspend fun getAllSubscriptionsList(): List<Subscription>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSubscription(subscription: Subscription): Long
 
@@ -49,6 +58,9 @@ interface SubscriptionDao {
 
     @Delete
     suspend fun deleteSubscription(subscription: Subscription)
+
+    @Query("DELETE FROM subscriptions")
+    suspend fun deleteAllSubscriptions()
 }
 
 @Dao
@@ -64,6 +76,9 @@ interface SubscriptionPaymentDao {
 
     @Query("DELETE FROM subscription_payments WHERE subscriptionId = :subId")
     suspend fun deletePaymentsBySubscriptionId(subId: Int)
+
+    @Query("DELETE FROM subscription_payments")
+    suspend fun deleteAllPayments()
 }
 
 @Dao
@@ -82,5 +97,8 @@ interface BillPaymentDao {
 
     @Query("DELETE FROM bill_payments WHERE billId = :billId AND monthYear = :monthYear")
     suspend fun deletePaymentsByBillIdAndMonth(billId: Int, monthYear: String)
+
+    @Query("DELETE FROM bill_payments")
+    suspend fun deleteAllBillPayments()
 }
 
