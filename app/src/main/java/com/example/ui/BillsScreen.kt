@@ -48,6 +48,7 @@ fun BillsScreen(
     var showAddEditDialog by remember { mutableStateOf(false) }
     var selectedBillForEdit by remember { mutableStateOf<Bill?>(null) }
     var billToPayInput by remember { mutableStateOf<Bill?>(null) }
+    var showAddHistoricalPaymentDialog by remember { mutableStateOf(false) }
 
     // Screen Main Tabs: "My Bills", "Payment History"
     var activeBillTab by remember { mutableStateOf("My Bills") } // "My Bills", "Payment History"
@@ -357,6 +358,20 @@ fun BillsScreen(
             ) {
                 Icon(imageVector = Icons.Default.Add, contentDescription = "Add Bill")
             }
+        } else {
+            FloatingActionButton(
+                onClick = {
+                    showAddHistoricalPaymentDialog = true
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(24.dp)
+                    .testTag("add_historical_bill_payment_fab"),
+                containerColor = MaterialTheme.colorScheme.secondary,
+                contentColor = MaterialTheme.colorScheme.onSecondary
+            ) {
+                Icon(imageVector = Icons.Default.Add, contentDescription = "Add Historical Bill Payment")
+            }
         }
 
         if (billToPayInput != null) {
@@ -393,6 +408,18 @@ fun BillsScreen(
                         viewModel.updateBill(updated)
                     }
                     showAddEditDialog = false
+                }
+            )
+        }
+
+        if (showAddHistoricalPaymentDialog) {
+            AddHistoricalBillPaymentDialog(
+                bills = bills,
+                monthOptions = viewModel.getMonthYearOptions(),
+                onDismiss = { showAddHistoricalPaymentDialog = false },
+                onConfirm = { bill, monthYear, amount, paymentDate ->
+                    viewModel.addHistoricalBillPayment(bill, monthYear, amount, paymentDate)
+                    showAddHistoricalPaymentDialog = false
                 }
             )
         }
@@ -1118,5 +1145,218 @@ fun RecordVariablePaymentDialog(
             }
         }
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddHistoricalBillPaymentDialog(
+    bills: List<Bill>,
+    monthOptions: List<Pair<String, String>>,
+    onDismiss: () -> Unit,
+    onConfirm: (bill: Bill, monthYear: String, amount: Double, paymentDate: Long) -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var selectedBill by remember { mutableStateOf<Bill?>(bills.firstOrNull()) }
+    var selectedMonthOption by remember { mutableStateOf(monthOptions.find { it.first == SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date()) } ?: monthOptions.firstOrNull()) }
+    var amountStr by remember { mutableStateOf("") }
+    var paymentDateMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+
+    var billDropdownExpanded by remember { mutableStateOf(false) }
+    var monthDropdownExpanded by remember { mutableStateOf(false) }
+    var amountError by remember { mutableStateOf(false) }
+
+    LaunchedEffect(selectedBill) {
+        if (selectedBill != null) {
+            amountStr = selectedBill!!.amount.toString()
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Record Historical Payment",
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("add_historical_payment_dialog"),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (bills.isEmpty()) {
+                    Text(
+                        text = "Please add at least one bill first in the 'My Bills' tab.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                } else {
+                    // Bill Selector Dropdown
+                    ExposedDropdownMenuBox(
+                        expanded = billDropdownExpanded,
+                        onExpandedChange = { billDropdownExpanded = !billDropdownExpanded },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = selectedBill?.name ?: "",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Select Bill") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = billDropdownExpanded) },
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth()
+                                .testTag("historical_bill_dropdown"),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = billDropdownExpanded,
+                            onDismissRequest = { billDropdownExpanded = false }
+                        ) {
+                            bills.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option.name) },
+                                    onClick = {
+                                        selectedBill = option
+                                        billDropdownExpanded = false
+                                    },
+                                    modifier = Modifier.testTag("historical_bill_option_${option.name}")
+                                )
+                            }
+                        }
+                    }
+
+                    // Month Selector Dropdown
+                    ExposedDropdownMenuBox(
+                        expanded = monthDropdownExpanded,
+                        onExpandedChange = { monthDropdownExpanded = !monthDropdownExpanded },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = selectedMonthOption?.second ?: "",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Billing Month") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = monthDropdownExpanded) },
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth()
+                                .testTag("historical_month_dropdown"),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = monthDropdownExpanded,
+                            onDismissRequest = { monthDropdownExpanded = false }
+                        ) {
+                            monthOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option.second) },
+                                    onClick = {
+                                        selectedMonthOption = option
+                                        monthDropdownExpanded = false
+                                    },
+                                    modifier = Modifier.testTag("historical_month_option_${option.first}")
+                                )
+                            }
+                        }
+                    }
+
+                    // Amount Text Field
+                    OutlinedTextField(
+                        value = amountStr,
+                        onValueChange = {
+                            amountStr = it
+                            val parsed = it.toDoubleOrNull()
+                            amountError = parsed == null || parsed < 0.0
+                        },
+                        label = { Text("Amount Paid (₹)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        isError = amountError,
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("historical_amount_input"),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    // Date Selection Input
+                    val dateLabel = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(paymentDateMillis))
+                    OutlinedTextField(
+                        value = dateLabel,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Payment Date") },
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.CalendarToday,
+                                contentDescription = "Pick Date",
+                                modifier = Modifier.clickable {
+                                    showDatePickerHelper(context, paymentDateMillis) { newMillis ->
+                                        paymentDateMillis = newMillis
+                                    }
+                                }
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                showDatePickerHelper(context, paymentDateMillis) { newMillis ->
+                                    paymentDateMillis = newMillis
+                                }
+                            }
+                            .testTag("historical_date_picker_trigger"),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (bills.isNotEmpty()) {
+                Button(
+                    onClick = {
+                        val amount = amountStr.toDoubleOrNull()
+                        val bill = selectedBill
+                        val monthYear = selectedMonthOption?.first
+                        if (amount != null && amount >= 0.0 && bill != null && monthYear != null) {
+                            onConfirm(bill, monthYear, amount, paymentDateMillis)
+                        } else {
+                            if (amount == null || amount < 0.0) amountError = true
+                        }
+                    },
+                    modifier = Modifier.testTag("confirm_add_historical_payment")
+                ) {
+                    Text("Save")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.testTag("cancel_add_historical_payment")) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+private fun showDatePickerHelper(
+    context: android.content.Context,
+    currentMillis: Long,
+    onDateSelected: (Long) -> Unit
+) {
+    val initialCal = Calendar.getInstance().apply { timeInMillis = currentMillis }
+    android.app.DatePickerDialog(
+        context,
+        { _, year, month, dayOfMonth ->
+            val selectedCal = Calendar.getInstance().apply {
+                set(Calendar.YEAR, year)
+                set(Calendar.MONTH, month)
+                set(Calendar.DAY_OF_MONTH, dayOfMonth)
+            }
+            onDateSelected(selectedCal.timeInMillis)
+        },
+        initialCal.get(Calendar.YEAR),
+        initialCal.get(Calendar.MONTH),
+        initialCal.get(Calendar.DAY_OF_MONTH)
+    ).show()
 }
 

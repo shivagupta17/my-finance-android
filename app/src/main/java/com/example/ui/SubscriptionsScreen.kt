@@ -46,6 +46,7 @@ fun SubscriptionsScreen(
     
     var showAddEditDialog by remember { mutableStateOf(false) }
     var selectedSubForEdit by remember { mutableStateOf<Subscription?>(null) }
+    var showAddHistoricalPaymentDialog by remember { mutableStateOf(false) }
     
     var activeSubTab by remember { mutableStateOf("My Subscriptions") } // "My Subscriptions", "Payment History"
     
@@ -313,19 +314,35 @@ fun SubscriptionsScreen(
         }
 
         // FAB
-        FloatingActionButton(
-            onClick = {
-                selectedSubForEdit = null
-                showAddEditDialog = true
-            },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(24.dp)
-                .testTag("add_subscription_fab"),
-            containerColor = MaterialTheme.colorScheme.secondary,
-            contentColor = MaterialTheme.colorScheme.onSecondary
-        ) {
-            Icon(imageVector = Icons.Default.Add, contentDescription = "Add Subscription")
+        if (activeSubTab == "My Subscriptions") {
+            FloatingActionButton(
+                onClick = {
+                    selectedSubForEdit = null
+                    showAddEditDialog = true
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(24.dp)
+                    .testTag("add_subscription_fab"),
+                containerColor = MaterialTheme.colorScheme.secondary,
+                contentColor = MaterialTheme.colorScheme.onSecondary
+            ) {
+                Icon(imageVector = Icons.Default.Add, contentDescription = "Add Subscription")
+            }
+        } else {
+            FloatingActionButton(
+                onClick = {
+                    showAddHistoricalPaymentDialog = true
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(24.dp)
+                    .testTag("add_historical_subscription_payment_fab"),
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+            ) {
+                Icon(imageVector = Icons.Default.Add, contentDescription = "Add Historical Subscription Payment")
+            }
         }
 
         // Add/Edit Dialog sheet
@@ -354,6 +371,17 @@ fun SubscriptionsScreen(
                         viewModel.updateSubscription(updated)
                     }
                     showAddEditDialog = false
+                }
+            )
+        }
+
+        if (showAddHistoricalPaymentDialog) {
+            AddHistoricalSubscriptionPaymentDialog(
+                subscriptions = subscriptions,
+                onDismiss = { showAddHistoricalPaymentDialog = false },
+                onConfirm = { subscription, amount, paymentDate ->
+                    viewModel.addHistoricalSubscriptionPayment(subscription, amount, paymentDate)
+                    showAddHistoricalPaymentDialog = false
                 }
             )
         }
@@ -1041,4 +1069,156 @@ private fun showDatePicker(
         initialCal.get(Calendar.MONTH),
         initialCal.get(Calendar.DAY_OF_MONTH)
     ).show()
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddHistoricalSubscriptionPaymentDialog(
+    subscriptions: List<Subscription>,
+    onDismiss: () -> Unit,
+    onConfirm: (subscription: Subscription, amount: Double, paymentDate: Long) -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var selectedSub by remember { mutableStateOf<Subscription?>(subscriptions.firstOrNull()) }
+    var amountStr by remember { mutableStateOf("") }
+    var paymentDateMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+
+    var subDropdownExpanded by remember { mutableStateOf(false) }
+    var amountError by remember { mutableStateOf(false) }
+
+    LaunchedEffect(selectedSub) {
+        if (selectedSub != null) {
+            amountStr = selectedSub!!.amount.toString()
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Record Historical Subscription Payment",
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("add_historical_sub_payment_dialog"),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (subscriptions.isEmpty()) {
+                    Text(
+                        text = "Please add at least one subscription first in the 'My Subscriptions' tab.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                } else {
+                    // Subscription Selector Dropdown
+                    ExposedDropdownMenuBox(
+                        expanded = subDropdownExpanded,
+                        onExpandedChange = { subDropdownExpanded = !subDropdownExpanded },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = selectedSub?.name ?: "",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Select Subscription") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = subDropdownExpanded) },
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth()
+                                .testTag("historical_sub_dropdown"),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = subDropdownExpanded,
+                            onDismissRequest = { subDropdownExpanded = false }
+                        ) {
+                            subscriptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option.name) },
+                                    onClick = {
+                                        selectedSub = option
+                                        subDropdownExpanded = false
+                                    },
+                                    modifier = Modifier.testTag("historical_sub_option_${option.name}")
+                                )
+                            }
+                        }
+                    }
+
+                    // Amount Text Field
+                    OutlinedTextField(
+                        value = amountStr,
+                        onValueChange = {
+                            amountStr = it
+                            val parsed = it.toDoubleOrNull()
+                            amountError = parsed == null || parsed < 0.0
+                        },
+                        label = { Text("Amount Paid (₹)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        isError = amountError,
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("historical_sub_amount_input"),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    // Date Selection Input
+                    val dateLabel = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(paymentDateMillis))
+                    OutlinedTextField(
+                        value = dateLabel,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Payment Date") },
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.CalendarToday,
+                                contentDescription = "Pick Date",
+                                modifier = Modifier.clickable {
+                                    showDatePicker(context, paymentDateMillis) { newMillis ->
+                                        paymentDateMillis = newMillis
+                                    }
+                                }
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                showDatePicker(context, paymentDateMillis) { newMillis ->
+                                    paymentDateMillis = newMillis
+                                }
+                            }
+                            .testTag("historical_sub_date_picker_trigger"),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (subscriptions.isNotEmpty()) {
+                Button(
+                    onClick = {
+                        val amount = amountStr.toDoubleOrNull()
+                        val sub = selectedSub
+                        if (amount != null && amount >= 0.0 && sub != null) {
+                            onConfirm(sub, amount, paymentDateMillis)
+                        } else {
+                            if (amount == null || amount < 0.0) amountError = true
+                        }
+                    },
+                    modifier = Modifier.testTag("confirm_add_historical_sub_payment")
+                ) {
+                    Text("Save")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.testTag("cancel_add_historical_sub_payment")) {
+                Text("Cancel")
+            }
+        }
+    )
 }

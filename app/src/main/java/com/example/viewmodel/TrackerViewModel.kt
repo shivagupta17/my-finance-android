@@ -497,6 +497,41 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun addHistoricalBillPayment(bill: Bill, monthYear: String, amount: Double, paymentDate: Long) {
+        viewModelScope.launch {
+            val isCurrentlyPaid = bill.isPaidForMonthYear(monthYear)
+            if (!isCurrentlyPaid) {
+                val updatedPaidMonths = if (bill.paidMonths.isEmpty()) monthYear else "${bill.paidMonths},$monthYear"
+                repository.updateBill(bill.copy(paidMonths = updatedPaidMonths))
+            }
+            val payment = BillPayment(
+                billId = bill.id,
+                billName = bill.name,
+                amount = amount,
+                paymentDate = paymentDate,
+                monthYear = monthYear,
+                category = bill.category
+            )
+            repository.insertBillPayment(payment)
+        }
+    }
+
+    fun addHistoricalSubscriptionPayment(subscription: Subscription, amount: Double, paymentDate: Long) {
+        viewModelScope.launch {
+            val payment = SubscriptionPayment(
+                subscriptionId = subscription.id,
+                subscriptionName = subscription.name,
+                amount = amount,
+                paymentDate = paymentDate,
+                billingCycle = subscription.billingCycle,
+                paymentSource = subscription.paymentSource,
+                platform = subscription.platform,
+                category = subscription.category
+            )
+            repository.insertPayment(payment)
+        }
+    }
+
     fun exportDataToJson(): String {
         val backupObj = JSONObject()
         backupObj.put("version", 1)
