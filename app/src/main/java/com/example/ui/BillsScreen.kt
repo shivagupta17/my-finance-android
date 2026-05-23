@@ -57,7 +57,7 @@ fun BillsScreen(
     var selectedFilter by remember { mutableStateOf("All") } // "All", "Paid", "Unpaid"
 
     val filteredBills = remember(bills, selectedFilter, selectedMonthYear) {
-        val dueBills = bills.filter { it.isDueInMonthYear(selectedMonthYear) }
+        val dueBills = bills.filter { it.isDueInMonthYear(selectedMonthYear) || it.isPaidForMonthYear(selectedMonthYear) }
         when (selectedFilter) {
             "Paid" -> dueBills.filter { it.isPaidForMonthYear(selectedMonthYear) }
             "Unpaid" -> dueBills.filter { !it.isPaidForMonthYear(selectedMonthYear) }

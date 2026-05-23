@@ -244,16 +244,27 @@ fun SubscriptionsScreen(
                         }
                     }
                 } else {
+                    val sdf = SimpleDateFormat("yyyy-MM", Locale.getDefault())
                     LazyColumn(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         contentPadding = PaddingValues(bottom = 80.dp)
                     ) {
                         items(items = filteredSubs, key = { it.id }) { sub ->
+                            val matchingPayment = payments.find { pay ->
+                                pay.subscriptionId == sub.id && sdf.format(Date(pay.paymentDate)) == selectedMonthYear
+                            }
+                            val isPaid = matchingPayment != null
                             SubscriptionRowItem(
                                 subscription = sub,
+                                isPaid = isPaid,
                                 onToggleActive = { viewModel.toggleSubscriptionActive(sub) },
                                 onRenewClick = { viewModel.renewSubscription(sub, selectedMonthYear) },
+                                onUnpayClick = {
+                                    if (matchingPayment != null) {
+                                        viewModel.deletePayment(matchingPayment)
+                                    }
+                                },
                                 onEditClick = {
                                     selectedSubForEdit = sub
                                     showAddEditDialog = true
@@ -391,8 +402,10 @@ fun SubscriptionsScreen(
 @Composable
 fun SubscriptionRowItem(
     subscription: Subscription,
+    isPaid: Boolean,
     onToggleActive: () -> Unit,
     onRenewClick: () -> Unit,
+    onUnpayClick: () -> Unit,
     onEditClick: () -> Unit,
     onDeleteClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -545,20 +558,55 @@ fun SubscriptionRowItem(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (subscription.isActive) {
-                        Button(
-                            onClick = onRenewClick,
-                            modifier = Modifier
-                                .height(32.dp)
-                                .testTag("renew_sub_btn_${subscription.id}"),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.secondary
-                            ),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
-                        ) {
-                            Text(
-                                "Mark Paid",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
-                            )
+                        if (!isPaid) {
+                            Button(
+                                onClick = onRenewClick,
+                                modifier = Modifier
+                                    .height(32.dp)
+                                    .testTag("renew_sub_btn_${subscription.id}"),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondary
+                                ),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                            ) {
+                                Text(
+                                    "Mark Paid",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                                )
+                            }
+                        } else {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = "Paid",
+                                    tint = Color(0xFF4CAF50),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = "Paid",
+                                    style = MaterialTheme.typography.titleSmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF4CAF50)
+                                    )
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                TextButton(
+                                    onClick = onUnpayClick,
+                                    contentPadding = PaddingValues(0.dp),
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Text(
+                                        "Undo",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            color = MaterialTheme.colorScheme.error,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    )
+                                }
+                            }
                         }
                     }
 

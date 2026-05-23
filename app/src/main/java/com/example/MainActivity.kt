@@ -187,8 +187,16 @@ fun MainAppContainer() {
     }
   }
 
-  // Trigger immediate overdue and due items check on launch
+  // Trigger immediate overdue and due items check on launch, and clear old notifications
+  // from previous builds to prevent stale system-shade asset/loading errors.
   LaunchedEffect(Unit) {
+    try {
+      val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+      notificationManager?.cancelAll()
+    } catch (e: Exception) {
+      e.printStackTrace()
+    }
+    
     val checkIntent = Intent(context, com.example.receiver.CriticalAlertReceiver::class.java).apply {
       action = com.example.receiver.CriticalAlertReceiver.ACTION_CHECK_ALERTS
     }

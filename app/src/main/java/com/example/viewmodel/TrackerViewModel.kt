@@ -188,7 +188,7 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
         
         // Map Paid Bills
         billList.forEach { bill ->
-            if (bill.isDueInMonthYear(monthYear) && bill.isPaidForMonthYear(monthYear)) {
+            if (bill.isPaidForMonthYear(monthYear)) {
                 items.add(
                     UpcomingPaymentItem(
                         id = bill.id,
@@ -207,24 +207,22 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
         // Map Renewed Subscriptions
         val sdf = SimpleDateFormat("yyyy-MM", Locale.getDefault())
         subList.forEach { sub ->
-            if (sub.isDueInMonthYear(monthYear)) {
-                val isPaid = paymentList.any { pay ->
-                    pay.subscriptionId == sub.id && sdf.format(Date(pay.paymentDate)) == monthYear
-                }
-                if (isPaid) {
-                    items.add(
-                        UpcomingPaymentItem(
-                            id = sub.id,
-                            name = sub.name,
-                            amount = sub.amount,
-                            daysRemaining = 0,
-                            isOverdue = false,
-                            itemType = "SUBS_RENEWAL",
-                            extraInfo = sub.paymentSource,
-                            parentItem = sub
-                        )
+            val isPaid = paymentList.any { pay ->
+                pay.subscriptionId == sub.id && sdf.format(Date(pay.paymentDate)) == monthYear
+            }
+            if (isPaid) {
+                items.add(
+                    UpcomingPaymentItem(
+                        id = sub.id,
+                        name = sub.name,
+                        amount = sub.amount,
+                        daysRemaining = 0,
+                        isOverdue = false,
+                        itemType = "SUBS_RENEWAL",
+                        extraInfo = sub.paymentSource,
+                        parentItem = sub
                     )
-                }
+                )
             }
         }
         
@@ -499,18 +497,19 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
 
     fun addHistoricalBillPayment(bill: Bill, monthYear: String, amount: Double, paymentDate: Long) {
         viewModelScope.launch {
-            val isCurrentlyPaid = bill.isPaidForMonthYear(monthYear)
+            val dbBill = repository.getBillById(bill.id) ?: bill
+            val isCurrentlyPaid = dbBill.isPaidForMonthYear(monthYear)
             if (!isCurrentlyPaid) {
-                val updatedPaidMonths = if (bill.paidMonths.isEmpty()) monthYear else "${bill.paidMonths},$monthYear"
-                repository.updateBill(bill.copy(paidMonths = updatedPaidMonths))
+                val updatedPaidMonths = if (dbBill.paidMonths.isEmpty()) monthYear else "${dbBill.paidMonths},$monthYear"
+                repository.updateBill(dbBill.copy(paidMonths = updatedPaidMonths))
             }
             val payment = BillPayment(
-                billId = bill.id,
-                billName = bill.name,
+                billId = dbBill.id,
+                billName = dbBill.name,
                 amount = amount,
                 paymentDate = paymentDate,
                 monthYear = monthYear,
-                category = bill.category
+                category = dbBill.category
             )
             repository.insertBillPayment(payment)
         }
