@@ -326,16 +326,49 @@ fun BillsScreen(
                         }
                     }
                 } else {
+                    val groupedBillPayments = remember(billPayments) {
+                        billPayments.sortedByDescending { it.paymentDate }
+                            .groupBy { payment ->
+                                val sdf = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
+                                sdf.format(Date(payment.paymentDate))
+                            }
+                    }
+
                     LazyColumn(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         contentPadding = PaddingValues(bottom = 80.dp)
                     ) {
-                        items(items = billPayments, key = { it.id }) { payment ->
-                            BillPaymentRowItem(
-                                payment = payment,
-                                onDeleteClick = { viewModel.deleteBillPayment(payment) }
-                            )
+                        groupedBillPayments.forEach { (monthName, paymentsInMonth) ->
+                            item(key = "header_$monthName") {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp, horizontal = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = monthName,
+                                        style = MaterialTheme.typography.titleSmall.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        ),
+                                        modifier = Modifier.padding(end = 8.dp)
+                                    )
+                                    HorizontalDivider(
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                        thickness = 1.dp,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+
+                            items(items = paymentsInMonth, key = { "payment_${it.id}" }) { payment ->
+                                BillPaymentRowItem(
+                                    payment = payment,
+                                    onDeleteClick = { viewModel.deleteBillPayment(payment) }
+                                )
+                            }
                         }
                     }
                 }
@@ -389,6 +422,7 @@ fun BillsScreen(
         if (showAddEditDialog) {
             AddEditBillDialog(
                 bill = selectedBillForEdit,
+                defaultMonthYear = selectedMonthYear,
                 onDismiss = { showAddEditDialog = false },
                 onSave = { name, amount, category, dueDay, reminderDays, notes, billingCycle, startMonthYear, isVariable ->
                     if (selectedBillForEdit == null) {
@@ -788,6 +822,7 @@ fun BillPaymentRowItem(
 @Composable
 fun AddEditBillDialog(
     bill: Bill?,
+    defaultMonthYear: String,
     onDismiss: () -> Unit,
     onSave: (String, Double, String, Int, Int, String, String, String, Boolean) -> Unit
 ) {
@@ -798,7 +833,7 @@ fun AddEditBillDialog(
     var reminderDays by remember { mutableStateOf(bill?.customReminderDaysBefore ?: 1) }
     var notes by remember { mutableStateOf(bill?.notes ?: "") }
     var billingCycle by remember { mutableStateOf(bill?.billingCycle ?: "Monthly") }
-    var startMonthYear by remember { mutableStateOf(bill?.startMonthYear ?: "2026-05") }
+    var startMonthYear by remember { mutableStateOf(bill?.startMonthYear?.ifBlank { defaultMonthYear } ?: defaultMonthYear) }
     var isVariable by remember { mutableStateOf(bill?.isVariable ?: false) }
 
     var nameError by remember { mutableStateOf(false) }
@@ -953,10 +988,15 @@ fun AddEditBillDialog(
                     }
                 }
 
-                // Bill Starting Month (Shown only for Quarterly or Yearly or One-time bills)
-                if (billingCycle != "Monthly") {
+                // Bill Starting Month
+                if (true) {
                     var startMonthExpanded by remember { mutableStateOf(false) }
                     val currentLabel = monthOptions.find { it.first == startMonthYear }?.second ?: startMonthYear
+                    val labelText = when (billingCycle) {
+                        "One-time", "One-Time" -> "Payment Month"
+                        "Monthly" -> "Starting Month"
+                        else -> "Start Cycle Month"
+                    }
                     
                     ExposedDropdownMenuBox(
                         expanded = startMonthExpanded,
@@ -967,7 +1007,7 @@ fun AddEditBillDialog(
                             value = currentLabel,
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text(if (billingCycle == "One-time") "Payment Month" else "Start cycle month") },
+                            label = { Text(labelText) },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = startMonthExpanded) },
                             modifier = Modifier
                                 .menuAnchor()

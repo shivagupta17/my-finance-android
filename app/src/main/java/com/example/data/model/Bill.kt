@@ -18,13 +18,22 @@ data class Bill(
     val paidMonths: String = "", // Comma-separated string of "yyyy-MM" (e.g., "2026-04,2026-05")
     val notes: String = "",
     val billingCycle: String = "Monthly", // Monthly, Quarterly, Yearly, One-time
-    val startMonthYear: String = "2026-05", // yyyy-MM
+    val startMonthYear: String = "", // yyyy-MM
     val isVariable: Boolean = false
 ) {
     // Helper to check if this bill is due in a selected month-year
     fun isDueInMonthYear(monthYear: String): Boolean {
         val sdf = SimpleDateFormat("yyyy-MM", Locale.getDefault())
-        val startDate = try { sdf.parse(startMonthYear) } catch (e: Exception) { null } ?: return true
+        val startVal = (startMonthYear as? String) ?: ""
+        val cycle = (billingCycle as? String) ?: "Monthly"
+        if (startVal.isBlank()) {
+            if (cycle == "One-time" || cycle == "One-Time") {
+                return monthYear == sdf.format(Date())
+            }
+            return true
+        }
+        val effectiveStart = startVal
+        val startDate = try { sdf.parse(effectiveStart) } catch (e: Exception) { null } ?: return true
         val selectedDate = try { sdf.parse(monthYear) } catch (e: Exception) { null } ?: return true
         
         val startCal = Calendar.getInstance().apply { time = startDate }
@@ -36,12 +45,12 @@ data class Bill(
         val diffMonths = selectedMonthCount - startMonthCount
         if (diffMonths < 0) return false // Due starting from startMonthYear
 
-        if (billingCycle == "One-time" || billingCycle == "One-Time") {
-            return monthYear == startMonthYear
+        if (cycle == "One-time" || cycle == "One-Time") {
+            return monthYear == effectiveStart
         }
-        if (billingCycle == "Monthly") return true
+        if (cycle == "Monthly") return true
         
-        return when (billingCycle) {
+        return when (cycle) {
             "Quarterly" -> diffMonths % 3 == 0
             "Yearly" -> diffMonths % 12 == 0
             else -> true
@@ -49,8 +58,9 @@ data class Bill(
     }
     // Helper to check if this bill is paid in the current month
     fun isPaidForMonthYear(monthYear: String): Boolean {
-        if (paidMonths.isEmpty()) return false
-        val paidList = paidMonths.split(",")
+        val paid = (paidMonths as? String) ?: ""
+        if (paid.isEmpty()) return false
+        val paidList = paid.split(",")
         return paidList.contains(monthYear)
     }
 

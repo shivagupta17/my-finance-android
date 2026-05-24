@@ -182,18 +182,23 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
         bills, 
         subscriptions,
         payments,
+        billPayments,
         selectedMonthYear
-    ) { billList, subList, paymentList, monthYear ->
+    ) { billList, subList, paymentList, billPaymentList, monthYear ->
         val items = mutableListOf<UpcomingPaymentItem>()
         
         // Map Paid Bills
         billList.forEach { bill ->
             if (bill.isPaidForMonthYear(monthYear)) {
+                val actualPayment = billPaymentList.find { bp ->
+                    bp.billId == bill.id && bp.monthYear == monthYear
+                }
+                val finalAmount = actualPayment?.amount ?: bill.amount
                 items.add(
                     UpcomingPaymentItem(
                         id = bill.id,
                         name = bill.name,
-                        amount = bill.amount,
+                        amount = finalAmount,
                         daysRemaining = 0,
                         isOverdue = false,
                         itemType = "BILL",
@@ -207,15 +212,15 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
         // Map Renewed Subscriptions
         val sdf = SimpleDateFormat("yyyy-MM", Locale.getDefault())
         subList.forEach { sub ->
-            val isPaid = paymentList.any { pay ->
+            val correspondingPayment = paymentList.find { pay ->
                 pay.subscriptionId == sub.id && sdf.format(Date(pay.paymentDate)) == monthYear
             }
-            if (isPaid) {
+            if (correspondingPayment != null) {
                 items.add(
                     UpcomingPaymentItem(
                         id = sub.id,
                         name = sub.name,
-                        amount = sub.amount,
+                        amount = correspondingPayment.amount,
                         daysRemaining = 0,
                         isOverdue = false,
                         itemType = "SUBS_RENEWAL",
@@ -234,12 +239,34 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
     )
 
     // Stats flows
-    val monthlyBillsTotal: StateFlow<Double> = combine(bills, selectedMonthYear) { billList, monthYear ->
-        billList.filter { it.isDueInMonthYear(monthYear) }.map { it.amount }.sum()
+    val monthlyBillsTotal: StateFlow<Double> = combine(
+        bills,
+        billPayments,
+        selectedMonthYear
+    ) { billList, billPaymentList, monthYear ->
+        billList.filter { it.isDueInMonthYear(monthYear) || it.isPaidForMonthYear(monthYear) }.map { bill ->
+            if (bill.isPaidForMonthYear(monthYear)) {
+                val actualPayment = billPaymentList.find { bp ->
+                    bp.billId == bill.id && bp.monthYear == monthYear
+                }
+                actualPayment?.amount ?: bill.amount
+            } else {
+                bill.amount
+            }
+        }.sum()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
-    val monthlySubscriptionsTotal: StateFlow<Double> = subscriptions.map { subList ->
-        subList.filter { it.isActive }.map {
+    val monthlySubscriptionsTotal: StateFlow<Double> = combine(
+        subscriptions,
+        payments,
+        selectedMonthYear
+    ) { subList, paymentList, monthYear ->
+        val sdf = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+        subList.filter { sub ->
+            sub.isActive && (sub.isDueInMonthYear(monthYear) || paymentList.any { pay ->
+                pay.subscriptionId == sub.id && sdf.format(Date(pay.paymentDate)) == monthYear
+            })
+        }.map {
             when (it.billingCycle) {
                 "Yearly" -> it.amount / 12.0
                 "Quarterly" -> it.amount / 3.0
@@ -249,7 +276,7 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
     val outstandingBillsTotal: StateFlow<Double> = combine(bills, selectedMonthYear) { billList, monthYear ->
-        billList.filter { it.isDueInMonthYear(monthYear) && !it.isPaidForMonthYear(monthYear) }.map { it.amount }.sum()
+        billList.filter { (it.isDueInMonthYear(monthYear) || it.isPaidForMonthYear(monthYear)) && !it.isPaidForMonthYear(monthYear) }.map { it.amount }.sum()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
     // Grouping stats
@@ -290,8 +317,9 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
 
 
     // BILL EVENTS
-    fun addBill(name: String, amount: Double, category: String, dueDay: Int, reminderDays: Int, notes: String, billingCycle: String = "Monthly", startMonthYear: String = "2026-05", isVariable: Boolean = false) {
+    fun addBill(name: String, amount: Double, category: String, dueDay: Int, reminderDays: Int, notes: String, billingCycle: String = "Monthly", startMonthYear: String = "", isVariable: Boolean = false) {
         viewModelScope.launch {
+            val actualStart = startMonthYear.ifBlank { _selectedMonthYear.value }
             val bill = Bill(
                 name = name,
                 amount = amount,
@@ -300,7 +328,7 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
                 customReminderDaysBefore = reminderDays,
                 notes = notes,
                 billingCycle = billingCycle,
-                startMonthYear = startMonthYear,
+                startMonthYear = actualStart,
                 isVariable = isVariable
             )
             val id = repository.insertBill(bill)

@@ -308,16 +308,49 @@ fun SubscriptionsScreen(
                         }
                     }
                 } else {
+                    val groupedSubPayments = remember(payments) {
+                        payments.sortedByDescending { it.paymentDate }
+                            .groupBy { payment ->
+                                val sdf = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
+                                sdf.format(Date(payment.paymentDate))
+                            }
+                    }
+
                     LazyColumn(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         contentPadding = PaddingValues(bottom = 80.dp)
                     ) {
-                        items(items = payments, key = { it.id }) { payment ->
-                            SubscriptionPaymentRowItem(
-                                payment = payment,
-                                onDeleteClick = { viewModel.deletePayment(payment) }
-                            )
+                        groupedSubPayments.forEach { (monthName, paymentsInMonth) ->
+                            item(key = "header_$monthName") {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp, horizontal = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = monthName,
+                                        style = MaterialTheme.typography.titleSmall.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        ),
+                                        modifier = Modifier.padding(end = 8.dp)
+                                    )
+                                    HorizontalDivider(
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                        thickness = 1.dp,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+
+                            items(items = paymentsInMonth, key = { "payment_${it.id}" }) { payment ->
+                                SubscriptionPaymentRowItem(
+                                    payment = payment,
+                                    onDeleteClick = { viewModel.deletePayment(payment) }
+                                )
+                            }
                         }
                     }
                 }

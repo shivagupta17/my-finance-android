@@ -763,6 +763,116 @@ fun DashboardScreen(
         list.sortedByDescending { it.second }
     }
 
+    // Shared vibrant colors for charts definition
+    val chartColors = listOf(
+        Color(0xFFFF6B6B), // Coral Red
+        Color(0xFF4D96FF), // Neon Blue
+        Color(0xFF6BCB77), // Emerald Green
+        Color(0xFFFFD93D), // Sunny Yellow
+        Color(0xFFB983FF), // Pastel Purple
+        Color(0xFFFF8E53), // Warm Orange
+        Color(0xFF2EC4B6), // Turquoise
+        Color(0xFFE056FD), // Bright Magenta
+        Color(0xFFF0932B), // Pumpkin Orange
+        Color(0xFF70A1FF)  // Steel Blue
+    )
+
+    // Calculate monthly trend data (bills + subscriptions) depending on the active analytics period
+    val periodTrendData = remember(billPayments, subPayments, activePeriod, targetMonthsForPeriod, dashboardYear, dashboardQuarter, selectedDate, selectedMonthYear) {
+        val sdfMName = SimpleDateFormat("MMM", Locale.getDefault())
+        when (activePeriod) {
+            "Monthly" -> {
+                val trend = mutableListOf<Pair<String, Double>>()
+                val calTrend = Calendar.getInstance().apply { time = selectedDate }
+                calTrend.add(Calendar.MONTH, -5)
+                for (i in 0 until 6) {
+                    val labelMY = sdfMY.format(calTrend.time)
+                    val displayLabel = sdfMName.format(calTrend.time)
+                    val billsTotal = billPayments.filter { it.monthYear == labelMY }.sumOf { it.amount }
+                    val subsTotal = subPayments.filter {
+                        val pMY = sdfMY.format(Date(it.paymentDate))
+                        pMY == labelMY
+                    }.sumOf { it.amount }
+                    trend.add(Pair(displayLabel, billsTotal + subsTotal))
+                    calTrend.add(Calendar.MONTH, 1)
+                }
+                trend
+            }
+            "Quarterly" -> {
+                val trend = mutableListOf<Pair<String, Double>>()
+                val calTrend = Calendar.getInstance()
+                targetMonthsForPeriod.forEach { mY ->
+                    val parts = mY.split("-")
+                    if (parts.size == 2) {
+                        val yr = parts[0].toIntOrNull() ?: dashboardYear
+                        val mnStr = parts[1].toIntOrNull() ?: 1
+                        calTrend.set(Calendar.YEAR, yr)
+                        calTrend.set(Calendar.MONTH, mnStr - 1)
+                        calTrend.set(Calendar.DAY_OF_MONTH, 1)
+                        val displayLabel = sdfMName.format(calTrend.time)
+                        
+                        val billsTotal = billPayments.filter { it.monthYear == mY }.sumOf { it.amount }
+                        val subsTotal = subPayments.filter {
+                            val pMY = sdfMY.format(Date(it.paymentDate))
+                            pMY == mY
+                        }.sumOf { it.amount }
+                        trend.add(Pair(displayLabel, billsTotal + subsTotal))
+                    }
+                }
+                trend
+            }
+            "Yearly" -> {
+                val trend = mutableListOf<Pair<String, Double>>()
+                val calTrend = Calendar.getInstance()
+                targetMonthsForPeriod.forEach { mY ->
+                    val parts = mY.split("-")
+                    if (parts.size == 2) {
+                        val yr = parts[0].toIntOrNull() ?: dashboardYear
+                        val mnStr = parts[1].toIntOrNull() ?: 1
+                        calTrend.set(Calendar.YEAR, yr)
+                        calTrend.set(Calendar.MONTH, mnStr - 1)
+                        calTrend.set(Calendar.DAY_OF_MONTH, 1)
+                        val displayLabel = sdfMName.format(calTrend.time)
+                        
+                        val billsTotal = billPayments.filter { it.monthYear == mY }.sumOf { it.amount }
+                        val subsTotal = subPayments.filter {
+                            val pMY = sdfMY.format(Date(it.paymentDate))
+                            pMY == mY
+                        }.sumOf { it.amount }
+                        trend.add(Pair(displayLabel, billsTotal + subsTotal))
+                    }
+                }
+                trend
+            }
+            "Lifetime" -> {
+                val monthlyTotals = mutableMapOf<String, Double>()
+                billPayments.forEach {
+                    monthlyTotals[it.monthYear] = (monthlyTotals[it.monthYear] ?: 0.0) + it.amount
+                }
+                subPayments.forEach {
+                    val pMY = sdfMY.format(Date(it.paymentDate))
+                    monthlyTotals[pMY] = (monthlyTotals[pMY] ?: 0.0) + it.amount
+                }
+                val sorted = monthlyTotals.keys.sorted().takeLast(6)
+                val trend = mutableListOf<Pair<String, Double>>()
+                val calTrend = Calendar.getInstance()
+                sorted.forEach { mY ->
+                    val parts = mY.split("-")
+                    if (parts.size == 2) {
+                        val yr = parts[0].toIntOrNull() ?: 2026
+                        val mnStr = parts[1].toIntOrNull() ?: 1
+                        calTrend.set(Calendar.YEAR, yr)
+                        calTrend.set(Calendar.MONTH, mnStr - 1)
+                        val displayLabel = sdfMName.format(calTrend.time) + " '" + (yr % 100)
+                        trend.add(Pair(displayLabel, monthlyTotals[mY] ?: 0.0))
+                    }
+                }
+                trend
+            }
+            else -> emptyList()
+        }
+    }
+
     // Average monthly spending for historical comparison
     val allPreviousMonthsSpending = remember(billPayments, subPayments, selectedMonthYear) {
         val monthlyTotals = mutableMapOf<String, Double>()
@@ -1152,6 +1262,15 @@ fun DashboardScreen(
                 }
             }
 
+            // TREND HISTORY CHART CARD
+            if (activePeriod != "Forecast" && periodTrendData.isNotEmpty()) {
+                item {
+                    TrendBarChart(
+                        trendData = periodTrendData
+                    )
+                }
+            }
+
             // CATEGORY DISTRIBUTION CARD
             item {
                 Card(
@@ -1174,9 +1293,18 @@ fun DashboardScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                             )
                         } else {
+                            CategoryDonutChart(
+                                expenses = expensesByCategory,
+                                totalSpent = totalSpentOverall,
+                                colors = chartColors
+                            )
+
+                            Spacer(modifier = Modifier.height(24.dp))
+
                             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                                expensesByCategory.forEach { (cat, amount) ->
+                                expensesByCategory.forEachIndexed { index, (cat, amount) ->
                                     val percent = if (totalSpentOverall > 0) (amount / totalSpentOverall).toFloat() else 0f
+                                    val barColor = chartColors[index % chartColors.size]
                                     Column(modifier = Modifier.fillMaxWidth()) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
@@ -1195,7 +1323,7 @@ fun DashboardScreen(
                                                         else -> Icons.Default.Receipt
                                                     },
                                                     contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    tint = barColor,
                                                     modifier = Modifier.size(16.dp)
                                                 )
                                                 Spacer(modifier = Modifier.width(8.dp))
@@ -1213,7 +1341,7 @@ fun DashboardScreen(
                                                 .fillMaxWidth()
                                                 .height(6.dp)
                                                 .clip(CircleShape),
-                                            color = MaterialTheme.colorScheme.primary,
+                                            color = barColor,
                                             trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                                         )
                                     }
@@ -1369,6 +1497,223 @@ fun DashboardScreen(
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CategoryDonutChart(
+    expenses: List<Pair<String, Double>>,
+    totalSpent: Double,
+    colors: List<Color>,
+    modifier: Modifier = Modifier
+) {
+    if (expenses.isEmpty() || totalSpent <= 0.0) return
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Donut Chart Canvas
+        Box(
+            modifier = Modifier
+                .size(130.dp)
+                .weight(1.1f),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val strokeWidth = 14.dp.toPx()
+                var startAngle = -90f
+                
+                expenses.forEachIndexed { index, (_, amount) ->
+                    val sweepAngle = ((amount / totalSpent) * 360f).toFloat()
+                    val color = colors[index % colors.size]
+                    
+                    drawArc(
+                        color = color,
+                        startAngle = startAngle,
+                        sweepAngle = sweepAngle,
+                        useCenter = false,
+                        style = Stroke(width = strokeWidth)
+                    )
+                    startAngle += sweepAngle
+                }
+            }
+            
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "Total Spent",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+                Text(
+                    text = if (totalSpent >= 100000) "₹${String.format("%.0f", totalSpent)}" else "₹${String.format("%,.0f", totalSpent)}",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+
+        // Legend list
+        Column(
+            modifier = Modifier.weight(1.3f),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            expenses.take(4).forEachIndexed { index, (cat, amount) ->
+                val color = colors[index % colors.size]
+                val pct = (amount / totalSpent * 100)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(color)
+                    )
+                    Column {
+                        Text(
+                            text = cat,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "₹${String.format("%,.0f", amount)} (${String.format("%.1f", pct)}%)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+            }
+            if (expenses.size > 4) {
+                Text(
+                    text = "+ ${expenses.size - 4} more",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 16.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun TrendBarChart(
+    trendData: List<Pair<String, Double>>,
+    modifier: Modifier = Modifier
+) {
+    if (trendData.isEmpty()) return
+    
+    val maxVal = trendData.maxOfOrNull { it.second } ?: 1.0
+    val displayMax = if (maxVal == 0.0) 1.0 else maxVal
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Spending Trend History",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Max: ₹${String.format("%,.0f", maxVal)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Bars Container
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(130.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                trendData.forEach { (label, amount) ->
+                    val ratio = (amount / displayMax).toFloat().coerceIn(0f, 1f)
+                    
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        // The actual animated bar
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp),
+                            contentAlignment = Alignment.BottomCenter
+                        ) {
+                            // Background guide line/track
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .width(14.dp)
+                                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f))
+                            )
+                            
+                            // Accent filled bar
+                            val animatedHeight by animateFloatAsState(
+                                targetValue = ratio,
+                                animationSpec = tween(durationMillis = 800)
+                            )
+                            
+                            if (animatedHeight > 0.01f) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight(animatedHeight)
+                                        .width(14.dp)
+                                        .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                                        .background(
+                                            Brush.verticalGradient(
+                                                colors = listOf(
+                                                    MaterialTheme.colorScheme.primary,
+                                                    MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
+                                                )
+                                            )
+                                        )
+                                )
+                            }
+                        }
+                        
+                        // Label
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        
+                        // Small value indicator
+                        Text(
+                            text = if (amount > 0) "₹${String.format("%.0f", amount)}" else "₹0",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.SemiBold),
+                            color = if (amount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
             }
