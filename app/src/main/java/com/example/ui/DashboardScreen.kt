@@ -1397,7 +1397,7 @@ fun CategoryDonutChart(
     colors: List<Color>,
     modifier: Modifier = Modifier
 ) {
-    if (expenses.isEmpty() || totalSpent <= 0.0) return
+    if (expenses.isEmpty() || totalSpent <= 0.0 || colors.isEmpty()) return
 
     Row(
         modifier = modifier.fillMaxWidth(),

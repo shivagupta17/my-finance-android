@@ -118,7 +118,7 @@ class CriticalAlertReceiver : BroadcastReceiver() {
         val currentTime = System.currentTimeMillis()
 
         val bills = db.billDao().getAllBillsList()
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
 
         // Create high importance alerts channel
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -260,7 +260,7 @@ class CriticalAlertReceiver : BroadcastReceiver() {
         intent: Intent
     ) {
         val currentMonthYear = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date())
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
         val notificationId = if (itemType == "BILL") 10000 + itemId else 20000 + itemId
 
         if (itemType == "BILL") {

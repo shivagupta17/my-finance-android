@@ -4,6 +4,8 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -704,6 +706,7 @@ fun AddEditBillDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .testTag("add_edit_bill_dialog"),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -996,7 +999,9 @@ fun RecordVariablePaymentDialog(
         },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
@@ -1082,6 +1087,7 @@ fun AddHistoricalBillPaymentDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .testTag("add_historical_payment_dialog"),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {

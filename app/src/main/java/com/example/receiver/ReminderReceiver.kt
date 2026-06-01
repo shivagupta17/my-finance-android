@@ -25,7 +25,7 @@ class ReminderReceiver : BroadcastReceiver() {
         val message = intent.getStringExtra(EXTRA_MESSAGE) ?: "You have an upcoming payment due soon!"
         val notificationId = intent.getIntExtra(EXTRA_ID, System.currentTimeMillis().toInt())
 
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
 
         // Create Channel for Android 8.0+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

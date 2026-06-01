@@ -926,35 +926,98 @@ fun AddEditSubscriptionDialog(
                         .testTag("input_sub_date")
                 )
 
-                // Custom Notification row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                // Custom Notification section
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { autoNotify = !autoNotify }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Checkbox(
                             checked = autoNotify,
                             onCheckedChange = { autoNotify = it },
                             modifier = Modifier.testTag("checkbox_sub_notify")
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Notify before due date?",
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
                         )
                     }
 
                     if (autoNotify) {
-                        OutlinedTextField(
-                            value = customReminderDaysStr,
-                            onValueChange = { customReminderDaysStr = it },
-                            label = { Text("Days before") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
+                        Column(
                             modifier = Modifier
-                                .width(90.dp)
-                                .testTag("input_sub_reminder_days")
-                        )
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Remind me days before due:",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                listOf(1, 2, 3, 5, 7).forEach { days ->
+                                    val daysStr = days.toString()
+                                    val isSelected = customReminderDaysStr == daysStr
+                                    
+                                    Surface(
+                                        selected = isSelected,
+                                        onClick = { customReminderDaysStr = daysStr },
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                        contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        border = BorderStroke(
+                                            width = 1.dp,
+                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                                        ),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(36.dp)
+                                            .testTag("sub_reminder_chip_$days")
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = "${days}d",
+                                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            OutlinedTextField(
+                                value = customReminderDaysStr,
+                                onValueChange = { 
+                                    if (it.all { char -> char.isDigit() }) {
+                                        customReminderDaysStr = it
+                                    }
+                                },
+                                label = { Text("Custom days before due") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("input_sub_reminder_days"),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                        }
                     }
                 }
 
@@ -1146,6 +1209,7 @@ fun AddHistoricalSubscriptionPaymentDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .testTag("add_historical_sub_payment_dialog"),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
