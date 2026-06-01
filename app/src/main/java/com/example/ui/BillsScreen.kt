@@ -42,28 +42,13 @@ fun BillsScreen(
     val bills by viewModel.bills.collectAsState()
     val billPayments by viewModel.billPayments.collectAsState()
     val selectedMonthYear by viewModel.selectedMonthYear.collectAsState()
-    val totalBillsAmount by viewModel.monthlyBillsTotal.collectAsState()
-    val outstandingAmount by viewModel.outstandingBillsTotal.collectAsState()
 
     var showAddEditDialog by remember { mutableStateOf(false) }
     var selectedBillForEdit by remember { mutableStateOf<Bill?>(null) }
-    var billToPayInput by remember { mutableStateOf<Bill?>(null) }
     var showAddHistoricalPaymentDialog by remember { mutableStateOf(false) }
 
     // Screen Main Tabs: "My Bills", "Payment History"
     var activeBillTab by remember { mutableStateOf("My Bills") } // "My Bills", "Payment History"
-
-    // Filter state for "My Bills" Tab
-    var selectedFilter by remember { mutableStateOf("All") } // "All", "Paid", "Unpaid"
-
-    val filteredBills = remember(bills, selectedFilter, selectedMonthYear) {
-        val dueBills = bills.filter { it.isDueInMonthYear(selectedMonthYear) || it.isPaidForMonthYear(selectedMonthYear) }
-        when (selectedFilter) {
-            "Paid" -> dueBills.filter { it.isPaidForMonthYear(selectedMonthYear) }
-            "Unpaid" -> dueBills.filter { !it.isPaidForMonthYear(selectedMonthYear) }
-            else -> dueBills
-        }
-    }
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(
@@ -80,19 +65,16 @@ fun BillsScreen(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Monthly Payments",
+                        text = "Bills Configuration",
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
-                        text = "Track and authorize recurring service bills",
+                        text = "Add, modify, or remove recurring bill schedules",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                     )
                 }
-                
-                // Month selector dynamically filters the outstanding list & stats
-                MonthSelector(viewModel = viewModel)
             }
 
             // Centralized Navigation Tabs
@@ -131,111 +113,8 @@ fun BillsScreen(
             }
 
             if (activeBillTab == "My Bills") {
-                // Summary/Progress Card
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Outstanding in ${selectedMonthYear}",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            Icon(
-                                imageVector = Icons.Default.Receipt,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-
-                        Text(
-                            text = "₹${String.format("%,.2f", outstandingAmount)}",
-                            style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.ExtraBold),
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        val progressRatio = if (totalBillsAmount > 0) {
-                            val ratio = ((totalBillsAmount - outstandingAmount) / totalBillsAmount).toFloat()
-                            if (ratio.isNaN()) 1f else ratio.coerceIn(0f, 1f)
-                        } else 1f
-
-                        LinearProgressIndicator(
-                            progress = { progressRatio },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(8.dp)
-                                .clip(CircleShape),
-                            color = MaterialTheme.colorScheme.primary,
-                            trackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f)
-                        )
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "Paid: ₹${String.format("%,.0f", totalBillsAmount - outstandingAmount)}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                            )
-                            Text(
-                                text = "Total Commitment: ₹${String.format("%,.0f", totalBillsAmount)}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                            )
-                        }
-                    }
-                }
-
-                // Filter Tabs (Segmented Control style)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                            RoundedCornerShape(12.dp)
-                        )
-                        .padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    listOf("All", "Unpaid", "Paid").forEach { filter ->
-                        val isSelected = selectedFilter == filter
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(
-                                    if (isSelected) MaterialTheme.colorScheme.primary
-                                    else Color.Transparent
-                                )
-                                .clickable { selectedFilter = filter }
-                                .padding(vertical = 10.dp)
-                                .testTag("filter_bills_$filter"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = filter,
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary
-                                else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
-                // Bills List
-                if (filteredBills.isEmpty()) {
+                // Bills Configuration List
+                if (bills.isEmpty()) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -253,12 +132,12 @@ fun BillsScreen(
                                 modifier = Modifier.size(64.dp)
                             )
                             Text(
-                                text = "No bills found",
+                                text = "No bills configured",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                             )
                             Text(
-                                text = "Tap the '+' button below to create your first monthly payment item.",
+                                text = "Tap the '+' button below to define your first recurring bill item.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -272,17 +151,9 @@ fun BillsScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         contentPadding = PaddingValues(bottom = 80.dp)
                     ) {
-                        items(items = filteredBills, key = { it.id }) { bill ->
+                        items(items = bills, key = { it.id }) { bill ->
                             BillRowItem(
                                 bill = bill,
-                                selectedMonthYear = selectedMonthYear,
-                                onTogglePaid = {
-                                    if (!bill.isPaidForMonthYear(selectedMonthYear) && bill.isVariable) {
-                                        billToPayInput = bill
-                                    } else {
-                                        viewModel.toggleBillPaid(bill, selectedMonthYear)
-                                    }
-                                },
                                 onEditClick = {
                                     selectedBillForEdit = bill
                                     showAddEditDialog = true
@@ -407,17 +278,6 @@ fun BillsScreen(
             }
         }
 
-        if (billToPayInput != null) {
-            RecordVariablePaymentDialog(
-                bill = billToPayInput!!,
-                onDismiss = { billToPayInput = null },
-                onConfirm = { amt ->
-                    viewModel.toggleBillPaid(billToPayInput!!, selectedMonthYear, amt)
-                    billToPayInput = null
-                }
-            )
-        }
-
         // Add/Edit Dialog sheet
         if (showAddEditDialog) {
             AddEditBillDialog(
@@ -451,8 +311,8 @@ fun BillsScreen(
                 bills = bills,
                 monthOptions = viewModel.getMonthYearOptions(),
                 onDismiss = { showAddHistoricalPaymentDialog = false },
-                onConfirm = { bill, monthYear, amount, paymentDate ->
-                    viewModel.addHistoricalBillPayment(bill, monthYear, amount, paymentDate)
+                onConfirm = { bill, monthYear, amount, paymentDate, overwrite ->
+                    viewModel.addHistoricalBillPayment(bill, monthYear, amount, paymentDate, overwrite)
                     showAddHistoricalPaymentDialog = false
                 }
             )
@@ -463,33 +323,26 @@ fun BillsScreen(
 @Composable
 fun BillRowItem(
     bill: Bill,
-    selectedMonthYear: String,
-    onTogglePaid: () -> Unit,
     onEditClick: () -> Unit,
     onDeleteClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val isPaid = bill.isPaidForMonthYear(selectedMonthYear)
-
     Card(
         modifier = modifier
             .fillMaxWidth()
             .testTag("bill_card_${bill.id}"),
         colors = CardDefaults.cardColors(
-            containerColor = if (isPaid) {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
+            containerColor = MaterialTheme.colorScheme.surface
         ),
         border = BorderStroke(
             width = 1.dp,
-            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
         ),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            // Upper details row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -497,127 +350,127 @@ fun BillRowItem(
                 // Large Platform Indicator Block
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(8.dp))
                         .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = when (bill.category) {
-                            "Rent" -> Icons.Default.Home
+                            "Rent", "Rent & Housing" -> Icons.Default.Home
                             "Electricity" -> Icons.Default.Bolt
                             "Water" -> Icons.Default.Opacity
+                            "Gas & Fuel" -> Icons.Default.LocalGasStation
+                            "Internet", "Internet & Wi-Fi" -> Icons.Default.Wifi
+                            "Mobile & Phone" -> Icons.Default.PhoneAndroid
+                            "DTH & Cable TV" -> Icons.Default.Tv
+                            "Groceries & Milk" -> Icons.Default.ShoppingCart
                             "Credit Card" -> Icons.Default.CreditCard
-                            "Internet" -> Icons.Default.Wifi
+                            "Loan & EMI" -> Icons.Default.AccountBalance
                             "Insurance" -> Icons.Default.Shield
+                            "Maid & Services" -> Icons.Default.Person
+                            "Health & Gym" -> Icons.Default.Favorite
+                            "Education & School" -> Icons.Default.School
                             else -> Icons.Default.Receipt
                         },
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
                         Text(
                             text = bill.name,
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.Bold,
-                                textDecoration = if (isPaid) TextDecoration.LineThrough else TextDecoration.None
+                                fontSize = 15.sp
                             ),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            color = if (isPaid) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
-
+                        
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f))
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
                         ) {
                             Text(
                                 text = bill.category,
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp, fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.onSecondaryContainer
                             )
                         }
                         
                         if (bill.isVariable) {
-                            Spacer(modifier = Modifier.width(4.dp))
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f))
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
                             ) {
                                 Text(
                                     text = "Variable",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp, fontWeight = FontWeight.Bold),
                                     color = MaterialTheme.colorScheme.onErrorContainer
                                 )
                             }
                         }
                         
                         if (bill.billingCycle == "One-time" || bill.billingCycle == "One-Time") {
-                            Spacer(modifier = Modifier.width(4.dp))
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
+                                    .clip(RoundedCornerShape(4.dp))
                                     .background(MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.8f))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
                             ) {
                                 Text(
                                     text = "One-time",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp, fontWeight = FontWeight.Bold),
                                     color = MaterialTheme.colorScheme.onTertiaryContainer
                                 )
                             }
                         }
                     }
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = "Due Day: ${bill.dueDay}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                        Text(
-                            text = "•",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                        )
-                        Text(
-                            text = "🔔 Notify ${bill.customReminderDaysBefore} day(s) before",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
-                        )
-                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    Text(
+                        text = "Due Day: ${bill.dueDay}",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
                 }
 
                 // Cost display
                 Text(
-                    text = "₹${String.format("%.2f", bill.amount)}",
+                    text = if (bill.isVariable) {
+                        if (bill.amount <= 0.0) "Variable" else "Variable (~₹${String.format("%.2f", bill.amount)})"
+                    } else {
+                        "₹${String.format("%.2f", bill.amount)}"
+                    },
                     style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.ExtraBold,
-                        textDecoration = if (isPaid) TextDecoration.LineThrough else TextDecoration.None
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
                     ),
-                    color = if (isPaid) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(start = 8.dp)
                 )
             }
 
             if (bill.notes.isNotBlank()) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = bill.notes,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -625,97 +478,63 @@ fun BillRowItem(
             }
 
             HorizontalDivider(
-                modifier = Modifier.padding(vertical = 12.dp),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                modifier = Modifier.padding(vertical = 8.dp),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
             )
 
-            // Bottom Actions Row (Mark Paid Button / Edit / Delete)
+            // Bottom Actions Row (Edit / Delete icon shortcuts)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Beautiful interactive button instead of raw checkbox!
-                if (!isPaid) {
-                    Button(
-                        onClick = onTogglePaid,
-                        modifier = Modifier
-                            .height(36.dp)
-                            .testTag("mark_paid_bill_${bill.id}"),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        ),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
-                            Text(
-                                "Mark Paid",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
-                            )
-                        }
-                    }
-                } else {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = "Paid",
-                            tint = Color(0xFF4CAF50),
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Text(
-                            text = "Paid",
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF4CAF50)
-                            )
-                        )
-                        
-                        Spacer(modifier = Modifier.width(4.dp))
-                        
-                        // Let user click to un-pay quickly
-                        TextButton(
-                            onClick = onTogglePaid,
-                            modifier = Modifier.height(32.dp),
-                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                            contentPadding = PaddingValues(horizontal = 8.dp)
-                        ) {
-                            Text("Unpay", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
-                        }
-                    }
+                // Cycle and reminders
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CalendarToday,
+                        contentDescription = "Billing Cycle",
+                        modifier = Modifier.size(12.dp),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                    )
+                    Text(
+                        text = "Cycle: ${bill.billingCycle} • Remind: ${bill.customReminderDaysBefore} day(s) before",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    )
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     IconButton(
                         onClick = onEditClick,
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(28.dp)
                             .testTag("edit_bill_${bill.id}")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Edit,
                             contentDescription = "Edit Bill",
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.outline
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
                     }
 
                     IconButton(
                         onClick = onDeleteClick,
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(28.dp)
                             .testTag("delete_bill_${bill.id}")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Delete,
                             contentDescription = "Delete Bill",
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(14.dp),
                             tint = MaterialTheme.colorScheme.error
                         )
                     }
@@ -828,7 +647,7 @@ fun AddEditBillDialog(
 ) {
     var name by remember { mutableStateOf(bill?.name ?: "") }
     var amountStr by remember { mutableStateOf(bill?.amount?.let { if (it == 0.0) "" else it.toString() } ?: "") }
-    var category by remember { mutableStateOf(bill?.category ?: "Utilities") }
+    var category by remember { mutableStateOf(bill?.category ?: "Electricity") }
     var dueDay by remember { mutableStateOf(bill?.dueDay ?: 1) }
     var reminderDays by remember { mutableStateOf(bill?.customReminderDaysBefore ?: 1) }
     var notes by remember { mutableStateOf(bill?.notes ?: "") }
@@ -839,7 +658,24 @@ fun AddEditBillDialog(
     var nameError by remember { mutableStateOf(false) }
     var amountError by remember { mutableStateOf(false) }
 
-    val categories = listOf("Rent", "Electricity", "Water", "Internet", "Credit Card", "Insurance", "Utilities", "Other")
+    val categories = listOf(
+        "Rent & Housing",
+        "Electricity",
+        "Water",
+        "Gas & Fuel",
+        "Internet & Wi-Fi",
+        "Mobile & Phone",
+        "DTH & Cable TV",
+        "Groceries & Milk",
+        "Credit Card",
+        "Loan & EMI",
+        "Insurance",
+        "Maid & Services",
+        "Health & Gym",
+        "Education & School",
+        "Utilities",
+        "Other"
+    )
     var categoryExpanded by remember { mutableStateOf(false) }
 
     val monthOptions = remember {
@@ -899,10 +735,10 @@ fun AddEditBillDialog(
                     ) {
                         listOf(false, true).forEach { isVar ->
                             val isSelected = isVariable == isVar
-                            FilterChip(
+                            CompactSelectableChip(
                                 selected = isSelected,
                                 onClick = { isVariable = isVar },
-                                label = { Text(if (isVar) "Variable (Ask on Pay)" else "Fixed Amount") },
+                                text = if (isVar) "Variable" else "Fixed",
                                 modifier = Modifier.weight(1f).testTag("bill_variable_chip_$isVar")
                             )
                         }
@@ -972,18 +808,38 @@ fun AddEditBillDialog(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    Row(
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        listOf("Monthly", "Quarterly", "Yearly", "One-time").forEach { cycle ->
-                            val isSelected = billingCycle == cycle
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = { billingCycle = cycle },
-                                label = { Text(cycle) },
-                                modifier = Modifier.weight(1f).testTag("bill_cycle_chip_$cycle")
-                            )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf("Monthly", "Quarterly").forEach { cycle ->
+                                val isSelected = billingCycle == cycle
+                                CompactSelectableChip(
+                                    selected = isSelected,
+                                    onClick = { billingCycle = cycle },
+                                    text = cycle,
+                                    modifier = Modifier.weight(1f).testTag("bill_cycle_chip_$cycle")
+                                )
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf("Yearly", "One-time").forEach { cycle ->
+                                val isSelected = billingCycle == cycle
+                                CompactSelectableChip(
+                                    selected = isSelected,
+                                    onClick = { billingCycle = cycle },
+                                    text = cycle,
+                                    modifier = Modifier.weight(1f).testTag("bill_cycle_chip_$cycle")
+                                )
+                            }
                         }
                     }
                 }
@@ -1064,10 +920,10 @@ fun AddEditBillDialog(
                     ) {
                         listOf(1, 2, 3, 5, 7).forEach { days ->
                             val isSelected = reminderDays == days
-                            FilterChip(
+                            CompactSelectableChip(
                                 selected = isSelected,
                                 onClick = { reminderDays = days },
-                                label = { Text("${days}d") },
+                                text = "${days}d",
                                 modifier = Modifier.weight(1f).testTag("reminder_chip_$days")
                             )
                         }
@@ -1193,7 +1049,7 @@ fun AddHistoricalBillPaymentDialog(
     bills: List<Bill>,
     monthOptions: List<Pair<String, String>>,
     onDismiss: () -> Unit,
-    onConfirm: (bill: Bill, monthYear: String, amount: Double, paymentDate: Long) -> Unit
+    onConfirm: (bill: Bill, monthYear: String, amount: Double, paymentDate: Long, overwrite: Boolean) -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var selectedBill by remember { mutableStateOf<Bill?>(bills.firstOrNull()) }
@@ -1210,6 +1066,8 @@ fun AddHistoricalBillPaymentDialog(
             amountStr = selectedBill!!.amount.toString()
         }
     }
+
+    val isAlreadyPaid = selectedBill?.isPaidForMonthYear(selectedMonthOption?.first ?: "") == true
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1304,6 +1162,36 @@ fun AddHistoricalBillPaymentDialog(
                         }
                     }
 
+                    // Duplicate Warning Banner
+                    if (isAlreadyPaid) {
+                        val monthLabel = selectedMonthOption?.second ?: ""
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f)
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = "Warning",
+                                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = "Payment already marked for $monthLabel. Saving will replace it.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                        }
+                    }
+
                     // Amount Text Field
                     OutlinedTextField(
                         value = amountStr,
@@ -1359,14 +1247,14 @@ fun AddHistoricalBillPaymentDialog(
                         val bill = selectedBill
                         val monthYear = selectedMonthOption?.first
                         if (amount != null && amount >= 0.0 && bill != null && monthYear != null) {
-                            onConfirm(bill, monthYear, amount, paymentDateMillis)
+                            onConfirm(bill, monthYear, amount, paymentDateMillis, isAlreadyPaid)
                         } else {
                             if (amount == null || amount < 0.0) amountError = true
                         }
                     },
                     modifier = Modifier.testTag("confirm_add_historical_payment")
                 ) {
-                    Text("Save")
+                    Text(if (isAlreadyPaid) "Overwrite" else "Save")
                 }
             }
         },
@@ -1398,5 +1286,40 @@ private fun showDatePickerHelper(
         initialCal.get(Calendar.MONTH),
         initialCal.get(Calendar.DAY_OF_MONTH)
     ).show()
+}
+
+@Composable
+fun CompactSelectableChip(
+    selected: Boolean,
+    onClick: () -> Unit,
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        selected = selected,
+        onClick = onClick,
+        shape = RoundedCornerShape(8.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+        ),
+        modifier = modifier.height(36.dp)
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
+        }
+    }
 }
 

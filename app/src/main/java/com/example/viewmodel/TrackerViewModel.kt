@@ -34,7 +34,8 @@ data class UpcomingPaymentItem(
     val isOverdue: Boolean,
     val itemType: String, // "BILL" or "SUBSCRIPTION"
     val extraInfo: String, // Bill category or Subscription payment source
-    val parentItem: Any // Reference to original object
+    val parentItem: Any, // Reference to original object
+    val isSkipped: Boolean = false
 )
 
 data class MonthlyScheduleItem(
@@ -114,9 +115,9 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
             initialValue = emptyList()
         )
 
-    // Combined Flow for upcoming payments dashboard lists, filtered by selectedMonthYear, chronologically sorted
+    // Combined Flow for upcoming/overdue payments in selectedMonthYear
     val upcomingPayments: StateFlow<List<UpcomingPaymentItem>> = combine(
-        bills, 
+        bills,
         subscriptions,
         payments,
         selectedMonthYear
@@ -124,20 +125,21 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
         val items = mutableListOf<UpcomingPaymentItem>()
         val currentMonthYear = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date())
         
-        // Map Bills (only unpaid and due in the selected month)
+        // Map Bills (only unpaid and due in the selected month, not skipped)
         billList.forEach { bill ->
-            if (bill.isDueInMonthYear(monthYear) && !bill.isPaidForMonthYear(monthYear)) {
-                val days = bill.daysRemaining()
+            if (bill.isDueInMonthYear(monthYear) && !bill.isPaidForMonthYear(monthYear) && !bill.isSkippedForMonthYear(monthYear)) {
+                val days = bill.daysRemainingForMonthYear(monthYear)
                 items.add(
                     UpcomingPaymentItem(
                         id = bill.id,
                         name = bill.name,
                         amount = bill.amount,
                         daysRemaining = days,
-                        isOverdue = days < 0 && monthYear == currentMonthYear,
+                        isOverdue = days < 0,
                         itemType = "BILL",
                         extraInfo = bill.category,
-                        parentItem = bill
+                        parentItem = bill,
+                        isSkipped = false
                     )
                 )
             }
@@ -151,18 +153,18 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
                     pay.subscriptionId == sub.id && sdf.format(Date(pay.paymentDate)) == monthYear
                 }
                 if (!isPaid) {
-                    val days = sub.daysRemaining()
-                    val isOverdue = System.currentTimeMillis() > sub.renewalDate && monthYear == currentMonthYear
+                    val days = sub.daysRemainingForMonthYear(monthYear)
                     items.add(
                         UpcomingPaymentItem(
                             id = sub.id,
                             name = sub.name,
                             amount = sub.amount,
                             daysRemaining = days,
-                            isOverdue = isOverdue,
+                            isOverdue = days < 0,
                             itemType = "SUBS_RENEWAL",
                             extraInfo = sub.paymentSource,
-                            parentItem = sub
+                            parentItem = sub,
+                            isSkipped = false
                         )
                     )
                 }
@@ -187,7 +189,7 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
     ) { billList, subList, paymentList, billPaymentList, monthYear ->
         val items = mutableListOf<UpcomingPaymentItem>()
         
-        // Map Paid Bills
+        // Map Paid and Skipped Bills
         billList.forEach { bill ->
             if (bill.isPaidForMonthYear(monthYear)) {
                 val actualPayment = billPaymentList.find { bp ->
@@ -203,7 +205,22 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
                         isOverdue = false,
                         itemType = "BILL",
                         extraInfo = bill.category,
-                        parentItem = bill
+                        parentItem = bill,
+                        isSkipped = false
+                    )
+                )
+            } else if (bill.isSkippedForMonthYear(monthYear)) {
+                items.add(
+                    UpcomingPaymentItem(
+                        id = bill.id,
+                        name = bill.name,
+                        amount = 0.0,
+                        daysRemaining = 0,
+                        isOverdue = false,
+                        itemType = "BILL",
+                        extraInfo = "${bill.category} (Skipped)",
+                        parentItem = bill,
+                        isSkipped = true
                     )
                 )
             }
@@ -225,7 +242,8 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
                         isOverdue = false,
                         itemType = "SUBS_RENEWAL",
                         extraInfo = sub.paymentSource,
-                        parentItem = sub
+                        parentItem = sub,
+                        isSkipped = false
                     )
                 )
             }
@@ -250,6 +268,8 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
                     bp.billId == bill.id && bp.monthYear == monthYear
                 }
                 actualPayment?.amount ?: bill.amount
+            } else if (bill.isSkippedForMonthYear(monthYear)) {
+                0.0
             } else {
                 bill.amount
             }
@@ -276,7 +296,7 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
     val outstandingBillsTotal: StateFlow<Double> = combine(bills, selectedMonthYear) { billList, monthYear ->
-        billList.filter { (it.isDueInMonthYear(monthYear) || it.isPaidForMonthYear(monthYear)) && !it.isPaidForMonthYear(monthYear) }.map { it.amount }.sum()
+        billList.filter { (it.isDueInMonthYear(monthYear) || it.isPaidForMonthYear(monthYear)) && !it.isPaidForMonthYear(monthYear) && !it.isSkippedForMonthYear(monthYear) }.map { it.amount }.sum()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
     // Grouping stats
@@ -368,7 +388,19 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
                 if (bill.paidMonths.isEmpty()) monthYear else "${bill.paidMonths},$monthYear"
             }
             
-            val updatedBill = bill.copy(paidMonths = updatedPaidMonths)
+            var updatedSkippedMonths = bill.skippedMonths
+            if (!isCurrentlyPaid) {
+                // Unskip if we are marking as paid
+                val list = bill.skippedMonths.split(",").toMutableList()
+                if (list.remove(monthYear)) {
+                    updatedSkippedMonths = list.filter { it.isNotEmpty() }.joinToString(",")
+                }
+            }
+            
+            val updatedBill = bill.copy(
+                paidMonths = updatedPaidMonths,
+                skippedMonths = updatedSkippedMonths
+            )
             repository.updateBill(updatedBill)
             
             if (isCurrentlyPaid) {
@@ -392,6 +424,39 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun toggleBillSkipped(bill: Bill, monthYear: String) {
+        viewModelScope.launch {
+            val isCurrentlySkipped = bill.isSkippedForMonthYear(monthYear)
+            
+            val updatedSkippedMonths = if (isCurrentlySkipped) {
+                val list = bill.skippedMonths.split(",").toMutableList()
+                list.remove(monthYear)
+                list.filter { it.isNotEmpty() }.joinToString(",")
+            } else {
+                if (bill.skippedMonths.isEmpty()) monthYear else "${bill.skippedMonths},$monthYear"
+            }
+            
+            var updatedPaidMonths = bill.paidMonths
+            if (!isCurrentlySkipped) {
+                // Unpay if we are marking as skipped
+                val list = bill.paidMonths.split(",").toMutableList()
+                if (list.remove(monthYear)) {
+                    updatedPaidMonths = list.filter { it.isNotEmpty() }.joinToString(",")
+                    repository.deleteBillPaymentByBillIdAndMonth(bill.id, monthYear)
+                }
+            }
+            
+            val updatedBill = bill.copy(
+                skippedMonths = updatedSkippedMonths,
+                paidMonths = updatedPaidMonths
+            )
+            repository.updateBill(updatedBill)
+            
+            ReminderScheduler.cancelBillReminder(context, updatedBill)
+            ReminderScheduler.scheduleBillReminder(context, updatedBill)
+        }
+    }
+
 
     // SUBSCRIPTION EVENTS
     fun addSubscription(
@@ -404,7 +469,8 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
         renewalDate: Long,
         isAutoNotify: Boolean,
         reminderDays: Int,
-        notes: String
+        notes: String,
+        status: String = "Active"
     ) {
         viewModelScope.launch {
             val subscription = Subscription(
@@ -417,7 +483,9 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
                 renewalDate = renewalDate,
                 isAutoNotify = isAutoNotify,
                 customReminderDaysBefore = reminderDays,
-                notes = notes
+                notes = notes,
+                status = status,
+                isActive = (status == "Active")
             )
             val id = repository.insertSubscription(subscription)
             val createdSub = subscription.copy(id = id.toInt())
@@ -447,20 +515,13 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
     fun renewSubscription(subscription: Subscription, selectedMonthYear: String) {
         viewModelScope.launch {
             val currentMonthYear = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date())
-            val paymentTimeMillis = if (selectedMonthYear == currentMonthYear) {
+            val dueMonthYear = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date(subscription.renewalDate))
+            
+            val paymentTimeMillis = if (dueMonthYear == currentMonthYear) {
                 System.currentTimeMillis()
             } else {
-                val cal = Calendar.getInstance()
-                val parts = selectedMonthYear.split("-")
-                if (parts.size == 2) {
-                    val year = parts[0].toIntOrNull() ?: cal.get(Calendar.YEAR)
-                    val month = (parts[1].toIntOrNull() ?: (cal.get(Calendar.MONTH) + 1)) - 1
-                    cal.set(Calendar.YEAR, year)
-                    cal.set(Calendar.MONTH, month)
-                    val subCal = Calendar.getInstance().apply { timeInMillis = subscription.renewalDate }
-                    cal.set(Calendar.DAY_OF_MONTH, subCal.get(Calendar.DAY_OF_MONTH))
-                }
-                cal.timeInMillis
+                // If paying a past-due or different-due cycle, base the payment timestamp on the sub's renewal due date
+                subscription.renewalDate
             }
 
             val nextRenewal = subscription.getNextRenewalDate()
@@ -490,7 +551,25 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
 
     fun toggleSubscriptionActive(subscription: Subscription) {
         viewModelScope.launch {
-            val updatedSub = subscription.copy(isActive = !subscription.isActive)
+            val nextActive = !subscription.isActive
+            val nextStatus = if (nextActive) "Active" else "Paused"
+            val updatedSub = subscription.copy(isActive = nextActive, status = nextStatus)
+            repository.updateSubscription(updatedSub)
+            
+            if (updatedSub.isActive) {
+                if (updatedSub.isAutoNotify) {
+                    ReminderScheduler.scheduleSubscriptionReminder(context, updatedSub)
+                }
+            } else {
+                ReminderScheduler.cancelSubscriptionReminder(context, subscription)
+            }
+        }
+    }
+
+    fun updateSubscriptionStatus(subscription: Subscription, status: String) {
+        viewModelScope.launch {
+            val nextActive = (status == "Active")
+            val updatedSub = subscription.copy(status = status, isActive = nextActive)
             repository.updateSubscription(updatedSub)
             
             if (updatedSub.isActive) {
@@ -506,6 +585,33 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
     fun deletePayment(payment: SubscriptionPayment) {
         viewModelScope.launch {
             repository.deletePaymentById(payment.id)
+            
+            // Roll back subscription renewal date if applicable
+            val sub = repository.getSubscriptionById(payment.subscriptionId)
+            if (sub != null) {
+                val sdf = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+                val paymentMonthYear = sdf.format(Date(payment.paymentDate))
+                val currentRenewalCal = Calendar.getInstance().apply { timeInMillis = sub.renewalDate }
+                
+                // Roll back current renewal date by 1 billing cycle to check against payment month-year
+                when (sub.billingCycle) {
+                    "Yearly" -> currentRenewalCal.add(Calendar.YEAR, -1)
+                    "Quarterly" -> currentRenewalCal.add(Calendar.MONTH, -3)
+                    else -> currentRenewalCal.add(Calendar.MONTH, -1)
+                }
+                
+                val previousRenewalMonthYear = sdf.format(Date(currentRenewalCal.timeInMillis))
+                if (paymentMonthYear == previousRenewalMonthYear) {
+                    val rolledBackSub = sub.copy(renewalDate = currentRenewalCal.timeInMillis)
+                    repository.updateSubscription(rolledBackSub)
+                    
+                    // Reschedule reminders
+                    ReminderScheduler.cancelSubscriptionReminder(context, rolledBackSub)
+                    if (rolledBackSub.isActive && rolledBackSub.isAutoNotify) {
+                        ReminderScheduler.scheduleSubscriptionReminder(context, rolledBackSub)
+                    }
+                }
+            }
         }
     }
 
@@ -523,13 +629,27 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun addHistoricalBillPayment(bill: Bill, monthYear: String, amount: Double, paymentDate: Long) {
+    fun addHistoricalBillPayment(bill: Bill, monthYear: String, amount: Double, paymentDate: Long, overwrite: Boolean = false) {
         viewModelScope.launch {
             val dbBill = repository.getBillById(bill.id) ?: bill
+            
+            if (overwrite) {
+                repository.deleteBillPaymentByBillIdAndMonth(dbBill.id, monthYear)
+            }
+
             val isCurrentlyPaid = dbBill.isPaidForMonthYear(monthYear)
             if (!isCurrentlyPaid) {
                 val updatedPaidMonths = if (dbBill.paidMonths.isEmpty()) monthYear else "${dbBill.paidMonths},$monthYear"
-                repository.updateBill(dbBill.copy(paidMonths = updatedPaidMonths))
+                
+                // Clear from skipped if marked paid
+                val skippedList = dbBill.skippedMonths.split(",").toMutableList()
+                skippedList.remove(monthYear)
+                val updatedSkippedMonths = skippedList.filter { it.isNotEmpty() }.joinToString(",")
+
+                repository.updateBill(dbBill.copy(
+                    paidMonths = updatedPaidMonths,
+                    skippedMonths = updatedSkippedMonths
+                ))
             }
             val payment = BillPayment(
                 billId = dbBill.id,
@@ -543,17 +663,43 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun addHistoricalSubscriptionPayment(subscription: Subscription, amount: Double, paymentDate: Long) {
+    fun addHistoricalSubscriptionPayment(subscription: Subscription, monthYear: String, amount: Double, paymentDate: Long, overwrite: Boolean = false) {
         viewModelScope.launch {
+            val dbSub = repository.getSubscriptionById(subscription.id) ?: subscription
+            
+            if (overwrite) {
+                repository.deleteSubscriptionPaymentBySubIdAndMonth(dbSub.id, monthYear)
+            }
+
+            // If historical payment date corresponds to current renewal month-year or later, advance the due cycle
+            var currentRenewal = dbSub.renewalDate
+            val sdf = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+            
+            val paymentMonthYear = monthYear
+            val currentDueMonthYear = sdf.format(Date(currentRenewal))
+            
+            if (paymentDate >= currentRenewal || paymentMonthYear >= currentDueMonthYear) {
+                val nextRenewal = dbSub.getNextRenewalDate()
+                val updatedSub = dbSub.copy(renewalDate = nextRenewal)
+                repository.updateSubscription(updatedSub)
+                
+                // Reschedule reminders
+                ReminderScheduler.cancelSubscriptionReminder(context, updatedSub)
+                if (updatedSub.isActive && updatedSub.isAutoNotify) {
+                    ReminderScheduler.scheduleSubscriptionReminder(context, updatedSub)
+                }
+            }
+            
             val payment = SubscriptionPayment(
-                subscriptionId = subscription.id,
-                subscriptionName = subscription.name,
+                subscriptionId = dbSub.id,
+                subscriptionName = dbSub.name,
                 amount = amount,
                 paymentDate = paymentDate,
-                billingCycle = subscription.billingCycle,
-                paymentSource = subscription.paymentSource,
-                platform = subscription.platform,
-                category = subscription.category
+                monthYear = monthYear,
+                billingCycle = dbSub.billingCycle,
+                paymentSource = dbSub.paymentSource,
+                platform = dbSub.platform,
+                category = dbSub.category
             )
             repository.insertPayment(payment)
         }
@@ -599,6 +745,7 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
                 put("customReminderDaysBefore", sub.customReminderDaysBefore)
                 put("isActive", sub.isActive)
                 put("notes", sub.notes)
+                put("status", sub.status)
             }
             subsArray.put(obj)
         }
@@ -701,7 +848,8 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
                             isAutoNotify = obj.optBoolean("isAutoNotify", true),
                             customReminderDaysBefore = obj.optInt("customReminderDaysBefore", 2),
                             isActive = obj.optBoolean("isActive", true),
-                            notes = obj.optString("notes", "")
+                            notes = obj.optString("notes", ""),
+                            status = obj.optString("status", if (obj.optBoolean("isActive", true)) "Active" else "Paused")
                         )
                         repository.insertSubscription(sub)
                         if (sub.isActive && sub.isAutoNotify) {

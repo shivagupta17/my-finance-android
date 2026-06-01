@@ -77,6 +77,9 @@ interface SubscriptionPaymentDao {
     @Query("DELETE FROM subscription_payments WHERE subscriptionId = :subId")
     suspend fun deletePaymentsBySubscriptionId(subId: Int)
 
+    @Query("DELETE FROM subscription_payments WHERE subscriptionId = :subId AND monthYear = :monthYear")
+    suspend fun deletePaymentsBySubIdAndMonth(subId: Int, monthYear: String)
+
     @Query("DELETE FROM subscription_payments")
     suspend fun deleteAllPayments()
 }

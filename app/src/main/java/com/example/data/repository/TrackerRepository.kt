@@ -61,6 +61,9 @@ class TrackerRepository(
 
     suspend fun deleteBillPaymentById(id: Int) = billPaymentDao.deleteBillPaymentById(id)
 
+    suspend fun deleteSubscriptionPaymentBySubIdAndMonth(subId: Int, monthYear: String) =
+        subscriptionPaymentDao.deletePaymentsBySubIdAndMonth(subId, monthYear)
+
     suspend fun deleteBillPaymentByBillIdAndMonth(billId: Int, monthYear: String) =
         billPaymentDao.deletePaymentsByBillIdAndMonth(billId, monthYear)
 

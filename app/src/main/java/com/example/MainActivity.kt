@@ -82,6 +82,18 @@ class MainActivity : ComponentActivity() {
       }
     }
   }
+
+  override fun onStop() {
+    super.onStop()
+    try {
+      val checkIntent = Intent(this, com.example.receiver.CriticalAlertReceiver::class.java).apply {
+        action = com.example.receiver.CriticalAlertReceiver.ACTION_CHECK_ALERTS
+      }
+      sendBroadcast(checkIntent)
+    } catch (e: Exception) {
+      e.printStackTrace()
+    }
+  }
 }
 
 fun getInitials(name: String): String {
@@ -234,7 +246,7 @@ fun MainAppContainer() {
               }
             },
             label = { Text("Your Name") },
-            placeholder = { Text("e.g. Shiva Gupta") },
+            placeholder = { Text("e.g. John Doe") },
             singleLine = true,
             isError = errorText != null,
             modifier = Modifier.fillMaxWidth()
@@ -312,7 +324,7 @@ fun MainAppContainer() {
               }
             },
             label = { Text("Your Name") },
-            placeholder = { Text("e.g. Shiva Gupta") },
+            placeholder = { Text("e.g. John Doe") },
             singleLine = true,
             isError = errorText != null,
             modifier = Modifier.fillMaxWidth()

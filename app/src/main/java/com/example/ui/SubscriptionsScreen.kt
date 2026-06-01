@@ -5,6 +5,8 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -28,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Subscription
+import com.example.data.model.SubscriptionPayment
 import com.example.viewmodel.TrackerViewModel
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -41,7 +44,6 @@ fun SubscriptionsScreen(
     modifier: Modifier = Modifier
 ) {
     val subscriptions by viewModel.subscriptions.collectAsState()
-    val totalSubsAmount by viewModel.monthlySubscriptionsTotal.collectAsState()
     val payments by viewModel.payments.collectAsState()
     
     var showAddEditDialog by remember { mutableStateOf(false) }
@@ -49,19 +51,6 @@ fun SubscriptionsScreen(
     var showAddHistoricalPaymentDialog by remember { mutableStateOf(false) }
     
     var activeSubTab by remember { mutableStateOf("My Subscriptions") } // "My Subscriptions", "Payment History"
-    
-    // Status Filter
-    var statusFilter by remember { mutableStateOf("Active") } // "Active", "Inactive", "All"
-
-    val filteredSubs = remember(subscriptions, statusFilter) {
-        when (statusFilter) {
-            "Active" -> subscriptions.filter { it.isActive }
-            "Inactive" -> subscriptions.filter { !it.isActive }
-            else -> subscriptions
-        }
-    }
-
-    val selectedMonthYear by viewModel.selectedMonthYear.collectAsState()
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(
@@ -78,63 +67,15 @@ fun SubscriptionsScreen(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Subscription Hub",
+                        text = "Subscriptions Hub",
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
-                        text = "Review recurring plans, sources, and platforms",
+                        text = "Manage recurring plans, sources, and platforms",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                     )
-                }
-            }
-
-            // Overview budget card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                shape = RoundedCornerShape(20.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "Monthly Sub Budget",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                        Text(
-                            text = "₹${String.format("%,.2f", totalSubsAmount)}/mo",
-                            style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.ExtraBold),
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                        Text(
-                            text = "Based on ${subscriptions.filter { it.isActive }.size} active plans",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.1f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Autorenew,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
                 }
             }
 
@@ -143,11 +84,10 @@ fun SubscriptionsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                        RoundedCornerShape(12.dp)
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        RoundedCornerShape(14.dp)
                     )
-                    .padding(4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    .padding(4.dp)
             ) {
                 listOf("My Subscriptions", "Payment History").forEach { tab ->
                     val isSelected = activeSubTab == tab
@@ -175,44 +115,8 @@ fun SubscriptionsScreen(
             }
 
             if (activeSubTab == "My Subscriptions") {
-                // Filtering selector
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                            RoundedCornerShape(12.dp)
-                        )
-                        .padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    listOf("Active", "Inactive", "All").forEach { filter ->
-                        val isSelected = statusFilter == filter
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(
-                                    if (isSelected) MaterialTheme.colorScheme.secondary
-                                    else Color.Transparent
-                                )
-                                .clickable { statusFilter = filter }
-                                .padding(vertical = 10.dp)
-                                .testTag("filter_subs_$filter"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = filter,
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = if (isSelected) MaterialTheme.colorScheme.onSecondary
-                                else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
                 // Subscription List
-                if (filteredSubs.isEmpty()) {
+                if (subscriptions.isEmpty()) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -244,27 +148,15 @@ fun SubscriptionsScreen(
                         }
                     }
                 } else {
-                    val sdf = SimpleDateFormat("yyyy-MM", Locale.getDefault())
                     LazyColumn(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         contentPadding = PaddingValues(bottom = 80.dp)
                     ) {
-                        items(items = filteredSubs, key = { it.id }) { sub ->
-                            val matchingPayment = payments.find { pay ->
-                                pay.subscriptionId == sub.id && sdf.format(Date(pay.paymentDate)) == selectedMonthYear
-                            }
-                            val isPaid = matchingPayment != null
+                        items(items = subscriptions, key = { it.id }) { sub ->
                             SubscriptionRowItem(
                                 subscription = sub,
-                                isPaid = isPaid,
-                                onToggleActive = { viewModel.toggleSubscriptionActive(sub) },
-                                onRenewClick = { viewModel.renewSubscription(sub, selectedMonthYear) },
-                                onUnpayClick = {
-                                    if (matchingPayment != null) {
-                                        viewModel.deletePayment(matchingPayment)
-                                    }
-                                },
+                                onStatusChange = { newStatus -> viewModel.updateSubscriptionStatus(sub, newStatus) },
                                 onEditClick = {
                                     selectedSubForEdit = sub
                                     showAddEditDialog = true
@@ -394,10 +286,10 @@ fun SubscriptionsScreen(
             AddEditSubscriptionDialog(
                 subscription = selectedSubForEdit,
                 onDismiss = { showAddEditDialog = false },
-                onSave = { name, amount, cycle, source, platform, category, date, autoNotify, reminderDays, notes ->
+                onSave = { name, amount, cycle, source, platform, category, date, autoNotify, reminderDays, notes, status ->
                     if (selectedSubForEdit == null) {
                         viewModel.addSubscription(
-                            name, amount, cycle, source, platform, category, date, autoNotify, reminderDays, notes
+                            name, amount, cycle, source, platform, category, date, autoNotify, reminderDays, notes, status
                         )
                     } else {
                         val updated = selectedSubForEdit!!.copy(
@@ -410,7 +302,9 @@ fun SubscriptionsScreen(
                             renewalDate = date,
                             isAutoNotify = autoNotify,
                             customReminderDaysBefore = reminderDays,
-                            notes = notes
+                            notes = notes,
+                            status = status,
+                            isActive = (status == "Active")
                         )
                         viewModel.updateSubscription(updated)
                     }
@@ -422,9 +316,11 @@ fun SubscriptionsScreen(
         if (showAddHistoricalPaymentDialog) {
             AddHistoricalSubscriptionPaymentDialog(
                 subscriptions = subscriptions,
+                monthOptions = viewModel.getMonthYearOptions(),
+                payments = payments,
                 onDismiss = { showAddHistoricalPaymentDialog = false },
-                onConfirm = { subscription, amount, paymentDate ->
-                    viewModel.addHistoricalSubscriptionPayment(subscription, amount, paymentDate)
+                onConfirm = { subscription, monthYear, amount, paymentDate, overwrite ->
+                    viewModel.addHistoricalSubscriptionPayment(subscription, monthYear, amount, paymentDate, overwrite)
                     showAddHistoricalPaymentDialog = false
                 }
             )
@@ -435,54 +331,56 @@ fun SubscriptionsScreen(
 @Composable
 fun SubscriptionRowItem(
     subscription: Subscription,
-    isPaid: Boolean,
-    onToggleActive: () -> Unit,
-    onRenewClick: () -> Unit,
-    onUnpayClick: () -> Unit,
+    onStatusChange: (String) -> Unit,
     onEditClick: () -> Unit,
     onDeleteClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var statusMenuExpanded by remember { mutableStateOf(false) }
+
     val sdf = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
     val formattedRenewal = sdf.format(Date(subscription.renewalDate))
-    val isSoon = subscription.isRenewingSoon()
+    val status = subscription.status
 
     Card(
         modifier = modifier
             .fillMaxWidth()
             .testTag("sub_card_${subscription.id}"),
         colors = CardDefaults.cardColors(
-            containerColor = if (!subscription.isActive) {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-            } else if (isSoon) {
-                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.15f)
-            } else {
-                MaterialTheme.colorScheme.surface
+            containerColor = when (status) {
+                "Paused" -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+                "Cancelled" -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f)
+                else -> MaterialTheme.colorScheme.surface
             }
         ),
         border = BorderStroke(
             width = 1.dp,
-            color = if (isSoon && subscription.isActive) {
-                MaterialTheme.colorScheme.error.copy(alpha = 0.4f)
-            } else {
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+            color = when (status) {
+                "Paused" -> MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+                "Cancelled" -> MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
+                else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
             }
         ),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        shape = RoundedCornerShape(12.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(12.dp)) {
             // Upper details row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Large Platform Indicator Design
+                // Styled platform indicator
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)),
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(
+                            when (status) {
+                                "Paused" -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
+                                "Cancelled" -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f)
+                                else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                            }
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -492,182 +390,203 @@ fun SubscriptionRowItem(
                             else -> Icons.Default.Autorenew
                         },
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.size(20.dp)
+                        tint = when (status) {
+                            "Paused" -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                            "Cancelled" -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                            else -> MaterialTheme.colorScheme.primary
+                        },
+                        modifier = Modifier.size(18.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
                         Text(
                             text = subscription.name,
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = if (status == "Cancelled") MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurface
+                            ),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
                         // Tag cycle
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(MaterialTheme.colorScheme.secondaryContainer)
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = if (status == "Active") 0.8f else 0.3f))
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
                         ) {
                             Text(
                                 text = subscription.billingCycle,
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp, fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = if (status == "Active") 1.0f else 0.6f)
                             )
                         }
                     }
 
                     Text(
                         text = "Source: ${subscription.paymentSource}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (status == "Active") 0.6f else 0.4f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
 
-                // Cost display
-                Column(horizontalAlignment = Alignment.End) {
+                // Cost & Status dropdown selector
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         text = "₹${String.format("%.2f", subscription.amount)}",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
-                        color = MaterialTheme.colorScheme.onSurface
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = if (status == "Cancelled") MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface
+                        )
                     )
-                    
-                    // Switch state
-                    Switch(
-                        checked = subscription.isActive,
-                        onCheckedChange = { onToggleActive() },
-                        modifier = Modifier
-                            .scale(0.7f)
-                            .testTag("toggle_sub_state_${subscription.id}")
-                    )
+
+                    // Compact Interactive Status Badge (opens dropdown to transition status)
+                    Box {
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(
+                                    when (status) {
+                                        "Active" -> Color(0xFFE8F5E9)
+                                        "Paused" -> Color(0xFFFFF3E0)
+                                        else -> Color(0xFFECEFF1)
+                                    }
+                                )
+                                .clickable { statusMenuExpanded = true }
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                text = status,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 9.sp,
+                                    color = when (status) {
+                                        "Active" -> Color(0xFF2E7D32)
+                                        "Paused" -> Color(0xFFE65100)
+                                        else -> Color(0xFF455A64)
+                                    }
+                                )
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = "Change Status",
+                                tint = when (status) {
+                                    "Active" -> Color(0xFF2E7D32)
+                                    "Paused" -> Color(0xFFE65100)
+                                    else -> Color(0xFF455A64)
+                                },
+                                modifier = Modifier.size(12.dp)
+                              )
+                        }
+
+                        DropdownMenu(
+                            expanded = statusMenuExpanded,
+                            onDismissRequest = { statusMenuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Active (Resume)", style = MaterialTheme.typography.bodyMedium) },
+                                onClick = {
+                                    onStatusChange("Active")
+                                    statusMenuExpanded = false
+                                },
+                                leadingIcon = { Icon(Icons.Default.PlayArrow, null, tint = Color(0xFF2E7D32)) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Pause Plan", style = MaterialTheme.typography.bodyMedium) },
+                                onClick = {
+                                    onStatusChange("Paused")
+                                    statusMenuExpanded = false
+                                },
+                                leadingIcon = { Icon(Icons.Default.Pause, null, tint = Color(0xFFE65100)) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Cancel Plan", style = MaterialTheme.typography.bodyMedium) },
+                                onClick = {
+                                    onStatusChange("Cancelled")
+                                    statusMenuExpanded = false
+                                },
+                                leadingIcon = { Icon(Icons.Default.Cancel, null, tint = Color(0xFF455A64)) }
+                            )
+                        }
+                    }
                 }
             }
 
             HorizontalDivider(
-                modifier = Modifier.padding(vertical = 12.dp),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                modifier = Modifier.padding(vertical = 8.dp),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
             )
 
-            // Bottom stats & controls row
+            // Bottom action row: Renewal Day vs configurations edit/delete
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Renewal tracker
-                Column {
+                // Left Part: Date or Current State Information
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CalendarToday,
+                        contentDescription = "Renewal Date",
+                        modifier = Modifier.size(12.dp),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                    )
                     Text(
-                        text = "Next Due Date",
-                        style = MaterialTheme.typography.labelSmall,
+                        text = "Next Renewal: $formattedRenewal",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.CalendarToday,
-                            contentDescription = null,
-                            modifier = Modifier.size(12.dp),
-                            tint = if (isSoon) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = formattedRenewal,
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                            color = if (isSoon) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
                 }
 
-                // Control Buttons
+                // Right Part: Compact configurations edit/delete
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    if (subscription.isActive) {
-                        if (!isPaid) {
-                            Button(
-                                onClick = onRenewClick,
-                                modifier = Modifier
-                                    .height(32.dp)
-                                    .testTag("renew_sub_btn_${subscription.id}"),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.secondary
-                                ),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
-                            ) {
-                                Text(
-                                    "Mark Paid",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
-                                )
-                            }
-                        } else {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.CheckCircle,
-                                    contentDescription = "Paid",
-                                    tint = Color(0xFF4CAF50),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Text(
-                                    text = "Paid",
-                                    style = MaterialTheme.typography.titleSmall.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF4CAF50)
-                                    )
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                TextButton(
-                                    onClick = onUnpayClick,
-                                    contentPadding = PaddingValues(0.dp),
-                                    modifier = Modifier.height(32.dp)
-                                ) {
-                                    Text(
-                                        "Undo",
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            color = MaterialTheme.colorScheme.error,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    )
-                                }
-                            }
-                        }
-                    }
-
+                    // Compact edit shortcut icon
                     IconButton(
                         onClick = onEditClick,
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(28.dp)
                             .testTag("edit_sub_${subscription.id}")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Edit,
                             contentDescription = "Edit Subscription",
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.secondary
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
                     }
 
+                    // Compact delete shortcut icon
                     IconButton(
                         onClick = onDeleteClick,
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(28.dp)
                             .testTag("delete_sub_${subscription.id}")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Delete,
                             contentDescription = "Delete Subscription",
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.error
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
                         )
                     }
                 }
@@ -683,7 +602,8 @@ fun AddEditSubscriptionDialog(
     onDismiss: () -> Unit,
     onSave: (
         name: String, amount: Double, cycle: String, source: String, platform: String,
-        category: String, nextDate: Long, autoNotify: Boolean, reminderDays: Int, notes: String
+        category: String, nextDate: Long, autoNotify: Boolean, reminderDays: Int, notes: String,
+        status: String
     ) -> Unit
 ) {
     val context = LocalContext.current
@@ -705,6 +625,7 @@ fun AddEditSubscriptionDialog(
     var source by remember { mutableStateOf(subscription?.paymentSource ?: "ICICI Credit Card") }
     var platform by remember { mutableStateOf(subscription?.platform ?: "Direct") }
     var category by remember { mutableStateOf(subscription?.category ?: "Entertainment") }
+    var status by remember { mutableStateOf(subscription?.status ?: "Active") }
     var autoNotify by remember { mutableStateOf(subscription?.isAutoNotify ?: true) }
     var customReminderDaysStr by remember { mutableStateOf(subscription?.customReminderDaysBefore?.toString() ?: "2") }
     var notes by remember { mutableStateOf(subscription?.notes ?: "") }
@@ -712,11 +633,13 @@ fun AddEditSubscriptionDialog(
     var cycleExpanded by remember { mutableStateOf(false) }
     var platformExpanded by remember { mutableStateOf(false) }
     var categoryExpanded by remember { mutableStateOf(false) }
+    var statusExpanded by remember { mutableStateOf(false) }
 
     // Dropdown choices
     val cycles = listOf("Monthly", "Quarterly", "Yearly")
     val platforms = listOf("Direct", "Apple Subscription", "Google Subscription", "Amazon Prime Channels", "Roku", "Other")
     val categories = listOf("Entertainment", "Gaming", "Music", "Productivity", "Utility", "Fitness", "Other")
+    val statuses = listOf("Active", "Paused", "Cancelled")
 
     // Input validations
     var nameError by remember { mutableStateOf(false) }
@@ -756,7 +679,8 @@ fun AddEditSubscriptionDialog(
                             selectedDateMillis,
                             autoNotify,
                             customReminderDaysStr.toIntOrNull() ?: 2,
-                            notes
+                            notes,
+                            status
                         )
                     }
                 },
@@ -777,6 +701,7 @@ fun AddEditSubscriptionDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .testTag("add_edit_sub_dialog"),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -800,65 +725,95 @@ fun AddEditSubscriptionDialog(
                     }
                 )
 
-                // Cost and Cycle row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                // Plan Status
+                ExposedDropdownMenuBox(
+                    expanded = statusExpanded,
+                    onExpandedChange = { statusExpanded = !statusExpanded },
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     OutlinedTextField(
-                        value = amountStr,
-                        onValueChange = {
-                            amountStr = it
-                            amountError = false
-                        },
-                        label = { Text("Cost (₹)") },
-                        isError = amountError,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true,
+                        readOnly = true,
+                        value = status,
+                        onValueChange = {},
+                        label = { Text("Plan Status") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = statusExpanded) },
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
                         modifier = Modifier
-                            .weight(1.1f)
-                            .testTag("input_sub_amount"),
-                        supportingText = {
-                            if (amountError) {
-                                Text("Cost > 0 required", color = MaterialTheme.colorScheme.error)
-                            }
-                        }
+                            .fillMaxWidth()
+                            .menuAnchor()
+                            .testTag("input_sub_status")
                     )
-
-                    ExposedDropdownMenuBox(
-                        expanded = cycleExpanded,
-                        onExpandedChange = { cycleExpanded = !cycleExpanded },
-                        modifier = Modifier.weight(0.9f)
+                    ExposedDropdownMenu(
+                        expanded = statusExpanded,
+                        onDismissRequest = { statusExpanded = false }
                     ) {
-                        OutlinedTextField(
-                            readOnly = true,
-                            value = cycle,
-                            onValueChange = {},
-                            label = { Text("Cycle") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = cycleExpanded) },
-                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .menuAnchor()
-                        )
-                        ExposedDropdownMenu(
-                            expanded = cycleExpanded,
-                            onDismissRequest = { cycleExpanded = false }
-                        ) {
-                            cycles.forEach { selection ->
-                                DropdownMenuItem(
-                                    text = { Text(selection) },
-                                    onClick = {
-                                        cycle = selection
-                                        cycleExpanded = false
-                                    }
-                                )
-                            }
+                        statuses.forEach { selection ->
+                            DropdownMenuItem(
+                                text = { Text(selection) },
+                                onClick = {
+                                    status = selection
+                                    statusExpanded = false
+                                }
+                            )
                         }
                     }
                 }
 
-                // Payment Source & Platform row
+                // Cost (Full Width)
+                OutlinedTextField(
+                    value = amountStr,
+                    onValueChange = {
+                        amountStr = it
+                        amountError = false
+                    },
+                    label = { Text("Cost (₹)") },
+                    isError = amountError,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("input_sub_amount"),
+                    supportingText = {
+                        if (amountError) {
+                            Text("Cost > 0 required", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                )
+
+                // Cycle (Full Width Dropdown)
+                ExposedDropdownMenuBox(
+                    expanded = cycleExpanded,
+                    onExpandedChange = { cycleExpanded = !cycleExpanded },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        readOnly = true,
+                        value = cycle,
+                        onValueChange = {},
+                        label = { Text("Cycle") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = cycleExpanded) },
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = cycleExpanded,
+                        onDismissRequest = { cycleExpanded = false }
+                    ) {
+                        cycles.forEach { selection ->
+                            DropdownMenuItem(
+                                text = { Text(selection) },
+                                onClick = {
+                                    cycle = selection
+                                    cycleExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Payment Source
                 OutlinedTextField(
                     value = source,
                     onValueChange = {
@@ -878,71 +833,68 @@ fun AddEditSubscriptionDialog(
                     }
                 )
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                // Via Platform (Full Width Dropdown)
+                ExposedDropdownMenuBox(
+                    expanded = platformExpanded,
+                    onExpandedChange = { platformExpanded = !platformExpanded },
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    ExposedDropdownMenuBox(
+                    OutlinedTextField(
+                        readOnly = true,
+                        value = platform,
+                        onValueChange = {},
+                        label = { Text("Via Platform") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = platformExpanded) },
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+                    ExposedDropdownMenu(
                         expanded = platformExpanded,
-                        onExpandedChange = { platformExpanded = !platformExpanded },
-                        modifier = Modifier.weight(1f)
+                        onDismissRequest = { platformExpanded = false }
                     ) {
-                        OutlinedTextField(
-                            readOnly = true,
-                            value = platform,
-                            onValueChange = {},
-                            label = { Text("Via Platform") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = platformExpanded) },
-                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .menuAnchor()
-                        )
-                        ExposedDropdownMenu(
-                            expanded = platformExpanded,
-                            onDismissRequest = { platformExpanded = false }
-                        ) {
-                            platforms.forEach { selection ->
-                                DropdownMenuItem(
-                                    text = { Text(selection) },
-                                    onClick = {
-                                        platform = selection
-                                        platformExpanded = false
-                                    }
-                                )
-                            }
+                        platforms.forEach { selection ->
+                            DropdownMenuItem(
+                                text = { Text(selection) },
+                                onClick = {
+                                    platform = selection
+                                    platformExpanded = false
+                                }
+                            )
                         }
                     }
+                }
 
-                    ExposedDropdownMenuBox(
+                // Category (Full Width Dropdown)
+                ExposedDropdownMenuBox(
+                    expanded = categoryExpanded,
+                    onExpandedChange = { categoryExpanded = !categoryExpanded },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        readOnly = true,
+                        value = category,
+                        onValueChange = {},
+                        label = { Text("Category") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+                    ExposedDropdownMenu(
                         expanded = categoryExpanded,
-                        onExpandedChange = { categoryExpanded = !categoryExpanded },
-                        modifier = Modifier.weight(1f)
+                        onDismissRequest = { categoryExpanded = false }
                     ) {
-                        OutlinedTextField(
-                            readOnly = true,
-                            value = category,
-                            onValueChange = {},
-                            label = { Text("Category") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
-                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .menuAnchor()
-                        )
-                        ExposedDropdownMenu(
-                            expanded = categoryExpanded,
-                            onDismissRequest = { categoryExpanded = false }
-                        ) {
-                            categories.forEach { selection ->
-                                DropdownMenuItem(
-                                    text = { Text(selection) },
-                                    onClick = {
-                                        category = selection
-                                        categoryExpanded = false
-                                    }
-                                )
-                            }
+                        categories.forEach { selection ->
+                            DropdownMenuItem(
+                                text = { Text(selection) },
+                                onClick = {
+                                    category = selection
+                                    categoryExpanded = false
+                                }
+                            )
                         }
                     }
                 }
@@ -1156,21 +1108,29 @@ private fun showDatePicker(
 @Composable
 fun AddHistoricalSubscriptionPaymentDialog(
     subscriptions: List<Subscription>,
+    monthOptions: List<Pair<String, String>>,
+    payments: List<SubscriptionPayment>,
     onDismiss: () -> Unit,
-    onConfirm: (subscription: Subscription, amount: Double, paymentDate: Long) -> Unit
+    onConfirm: (subscription: Subscription, monthYear: String, amount: Double, paymentDate: Long, overwrite: Boolean) -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var selectedSub by remember { mutableStateOf<Subscription?>(subscriptions.firstOrNull()) }
+    var selectedMonthOption by remember { mutableStateOf(monthOptions.find { it.first == SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date()) } ?: monthOptions.firstOrNull()) }
     var amountStr by remember { mutableStateOf("") }
     var paymentDateMillis by remember { mutableStateOf(System.currentTimeMillis()) }
 
     var subDropdownExpanded by remember { mutableStateOf(false) }
+    var monthDropdownExpanded by remember { mutableStateOf(false) }
     var amountError by remember { mutableStateOf(false) }
 
     LaunchedEffect(selectedSub) {
         if (selectedSub != null) {
             amountStr = selectedSub!!.amount.toString()
         }
+    }
+
+    val isAlreadyPaid = selectedSub != null && selectedMonthOption != null && payments.any { pay ->
+        pay.subscriptionId == selectedSub!!.id && pay.monthYear == selectedMonthOption!!.first
     }
 
     AlertDialog(
@@ -1231,6 +1191,71 @@ fun AddHistoricalSubscriptionPaymentDialog(
                         }
                     }
 
+                    // Month Selector Dropdown
+                    ExposedDropdownMenuBox(
+                        expanded = monthDropdownExpanded,
+                        onExpandedChange = { monthDropdownExpanded = !monthDropdownExpanded },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = selectedMonthOption?.second ?: "",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Billing Month") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = monthDropdownExpanded) },
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth()
+                                .testTag("historical_sub_month_dropdown"),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = monthDropdownExpanded,
+                            onDismissRequest = { monthDropdownExpanded = false }
+                        ) {
+                            monthOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option.second) },
+                                    onClick = {
+                                        selectedMonthOption = option
+                                        monthDropdownExpanded = false
+                                    },
+                                    modifier = Modifier.testTag("historical_sub_month_option_${option.first}")
+                                )
+                            }
+                        }
+                    }
+
+                    // Duplicate Warning Banner
+                    if (isAlreadyPaid) {
+                        val monthLabel = selectedMonthOption?.second ?: ""
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f)
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = "Warning",
+                                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = "Payment already marked for $monthLabel. Saving will replace it.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                        }
+                    }
+
                     // Amount Text Field
                     OutlinedTextField(
                         value = amountStr,
@@ -1284,15 +1309,16 @@ fun AddHistoricalSubscriptionPaymentDialog(
                     onClick = {
                         val amount = amountStr.toDoubleOrNull()
                         val sub = selectedSub
-                        if (amount != null && amount >= 0.0 && sub != null) {
-                            onConfirm(sub, amount, paymentDateMillis)
+                        val monthYear = selectedMonthOption?.first
+                        if (amount != null && amount >= 0.0 && sub != null && monthYear != null) {
+                            onConfirm(sub, monthYear, amount, paymentDateMillis, isAlreadyPaid)
                         } else {
                             if (amount == null || amount < 0.0) amountError = true
                         }
                     },
                     modifier = Modifier.testTag("confirm_add_historical_sub_payment")
                 ) {
-                    Text("Save")
+                    Text(if (isAlreadyPaid) "Overwrite" else "Save")
                 }
             }
         },

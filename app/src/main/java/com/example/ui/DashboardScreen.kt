@@ -43,19 +43,10 @@ fun HomeScreen(
     onNavigateToSubs: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val bills by viewModel.bills.collectAsState()
-    val subscriptions by viewModel.subscriptions.collectAsState()
     val upcomingPayments by viewModel.upcomingPayments.collectAsState()
     val completedPayments by viewModel.completedPayments.collectAsState()
     val selectedMonthYear by viewModel.selectedMonthYear.collectAsState()
     
-    val totalBillsAmount by viewModel.monthlyBillsTotal.collectAsState()
-    val outstandingBills by viewModel.outstandingBillsTotal.collectAsState()
-    val totalSubsAmount by viewModel.monthlySubscriptionsTotal.collectAsState()
-
-    val totalMonthExpense = totalBillsAmount + totalSubsAmount
-    val totalPaidBills = totalBillsAmount - outstandingBills
-
     var dashboardListTab by remember { mutableStateOf("Pending") } // "Pending", "Paid"
     var billToPayInput by remember { mutableStateOf<com.example.data.model.Bill?>(null) }
 
@@ -91,184 +82,6 @@ fun HomeScreen(
                 }
                 
                 MonthSelector(viewModel = viewModel)
-            }
-        }
-
-        // Custom Visual Dashboard Widget (Expenses Gauge Ring)
-        item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("summary_gauge_card"),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Custom Drawing Graphic (Donut Ring Chart)
-                    Box(
-                        modifier = Modifier
-                            .size(110.dp)
-                            .padding(4.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        val progressRatio = if (totalBillsAmount > 0) {
-                            val ratio = (totalPaidBills / totalBillsAmount).toFloat()
-                            if (ratio.isNaN()) 1.0f else ratio.coerceIn(0f, 1f)
-                        } else 1.0f
-
-                        val animatedProgress by animateFloatAsState(
-                            targetValue = progressRatio,
-                            animationSpec = tween(durationMillis = 1000)
-                        )
-
-                        Canvas(modifier = Modifier.fillMaxSize()) {
-                            // Background Ring
-                            drawCircle(
-                                color = Color.Gray.copy(alpha = 0.2f),
-                                radius = size.minDimension / 2,
-                                style = Stroke(width = 10.dp.toPx(), cap = StrokeCap.Round)
-                            )
-                            // Foreground Active Flow
-                            drawArc(
-                                color = Color(0xFF4CAF50), // Green for paid
-                                startAngle = -90f,
-                                sweepAngle = 360f * animatedProgress,
-                                useCenter = false,
-                                style = Stroke(width = 12.dp.toPx(), cap = StrokeCap.Round)
-                            )
-                        }
-                        
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "${(progressRatio * 100).toInt()}%",
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = "Bills Paid",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Monthly Commitment",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "₹${String.format("%,.2f", totalMonthExpense)}",
-                            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        
-                        Spacer(modifier = Modifier.height(6.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column {
-                                Text(
-                                    text = "Paid Bills",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                )
-                                Text(
-                                    text = "₹${String.format("%,.0f", totalPaidBills)}",
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = Color(0xFF4CAF50)
-                                )
-                            }
-                            Column {
-                                Text(
-                                    text = "Sub-plans",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                )
-                                Text(
-                                    text = "₹${String.format("%,.0f", totalSubsAmount)}",
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = MaterialTheme.colorScheme.secondary
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Quick Navigation Grid
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Card(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { onNavigateToBills() }
-                        .testTag("nav_bills"),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.ReceiptLong,
-                            contentDescription = "Bills",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(28.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "Manage Bills",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                        )
-                        Text(
-                            text = "${bills.size} registered items",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                    }
-                }
-
-                Card(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { onNavigateToSubs() }
-                        .testTag("nav_subscriptions"),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.Autorenew,
-                            contentDescription = "Subscriptions",
-                            tint = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.size(28.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "Subscriptions",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                        )
-                        Text(
-                            text = "${subscriptions.filter { it.isActive }.size} active plans",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                    }
-                }
             }
         }
 
@@ -362,6 +175,12 @@ fun HomeScreen(
                             if (dashboardListTab == "Pending") {
                                 viewModel.renewSubscription(parent, selectedMonthYear)
                             }
+                        }
+                    },
+                    onSkipToggle = {
+                        val parent = scheduleItem.parentItem
+                        if (scheduleItem.itemType == "BILL" && parent is com.example.data.model.Bill) {
+                            viewModel.toggleBillSkipped(parent, selectedMonthYear)
                         }
                     }
                 )
@@ -459,6 +278,7 @@ fun UpcomingPaymentRow(
     item: UpcomingPaymentItem,
     isPaidMode: Boolean,
     onPayToggle: () -> Unit,
+    onSkipToggle: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val isBill = item.itemType == "BILL"
@@ -469,7 +289,9 @@ fun UpcomingPaymentRow(
             .fillMaxWidth()
             .testTag("upcoming_payment_row_${item.itemType}_${item.id}"),
         colors = CardDefaults.cardColors(
-            containerColor = if (isPaidMode) {
+            containerColor = if (item.isSkipped) {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+            } else if (isPaidMode) {
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
             } else if (isOverdue) {
                 MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
@@ -479,7 +301,9 @@ fun UpcomingPaymentRow(
         ),
         border = BorderStroke(
             width = 1.dp,
-            color = if (isPaidMode) {
+            color = if (item.isSkipped) {
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+            } else if (isPaidMode) {
                 MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
             } else if (isOverdue) {
                 MaterialTheme.colorScheme.error.copy(alpha = 0.4f)
@@ -502,7 +326,8 @@ fun UpcomingPaymentRow(
                     .size(44.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(
-                        if (isPaidMode) Color(0xFFE8F5E9)
+                        if (item.isSkipped) MaterialTheme.colorScheme.surfaceVariant
+                        else if (isPaidMode) Color(0xFFE8F5E9)
                         else if (isOverdue) MaterialTheme.colorScheme.error.copy(alpha = 0.2f)
                         else if (isBill) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                         else MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)
@@ -510,12 +335,14 @@ fun UpcomingPaymentRow(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = if (isPaidMode) Icons.Default.CheckCircle
+                    imageVector = if (item.isSkipped) Icons.Default.Close
+                    else if (isPaidMode) Icons.Default.CheckCircle
                     else if (isOverdue) Icons.Default.Warning
                     else if (isBill) Icons.Default.Receipt
                     else Icons.Default.CreditCard,
                     contentDescription = item.itemType,
-                    tint = if (isPaidMode) Color(0xFF4CAF50)
+                    tint = if (item.isSkipped) MaterialTheme.colorScheme.outline
+                    else if (isPaidMode) Color(0xFF4CAF50)
                     else if (isOverdue) MaterialTheme.colorScheme.error
                     else if (isBill) MaterialTheme.colorScheme.primary
                     else MaterialTheme.colorScheme.secondary,
@@ -566,6 +393,7 @@ fun UpcomingPaymentRow(
                 // Days Counter Text Badge
                 Text(
                     text = when {
+                        item.isSkipped -> "Skipped"
                         isPaidMode -> "Payment Recorded"
                         isOverdue -> {
                             val parent = item.parentItem
@@ -584,7 +412,7 @@ fun UpcomingPaymentRow(
                         else -> "Due in ${item.daysRemaining} days"
                     },
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (isPaidMode) Color(0xFF2E7D32) else if (isOverdue) MaterialTheme.colorScheme.error else if (item.daysRemaining <= 2) Color(0xFFFF9800) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    color = if (item.isSkipped) MaterialTheme.colorScheme.outline else if (isPaidMode) Color(0xFF2E7D32) else if (isOverdue) MaterialTheme.colorScheme.error else if (item.daysRemaining <= 2) Color(0xFFFF9800) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -596,51 +424,96 @@ fun UpcomingPaymentRow(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.Center
             ) {
+                val parentItem = item.parentItem
+                val isVariableBill = isBill && parentItem is com.example.data.model.Bill && parentItem.isVariable
+                val costText = if (item.isSkipped) {
+                    "Skipped"
+                } else if (isVariableBill) {
+                    if (item.amount <= 0.0) "Variable" else "Variable (~₹${String.format("%.2f", item.amount)})"
+                } else {
+                    "₹${String.format("%.2f", item.amount)}"
+                }
+
                 Text(
-                    text = "₹${String.format("%.2f", item.amount)}",
+                    text = costText,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = if (item.isSkipped) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
 
                 if (!isPaidMode) {
-                    TextButton(
-                        onClick = onPayToggle,
-                        modifier = Modifier
-                            .height(32.dp)
-                            .testTag("action_button_${item.itemType}_${item.id}"),
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = if (isBill) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
-                        ),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = if (isBill) "Pay" else "Mark Paid",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
-                        )
+                        if (isBill) {
+                            TextButton(
+                                onClick = { onSkipToggle?.invoke() },
+                                modifier = Modifier
+                                    .height(32.dp)
+                                    .testTag("skip_button_${item.itemType}_${item.id}"),
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.outline
+                                ),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Skip",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                                )
+                            }
+                        }
+
+                        TextButton(
+                            onClick = onPayToggle,
+                            modifier = Modifier
+                                .height(32.dp)
+                                .testTag("action_button_${item.itemType}_${item.id}"),
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = if (isBill) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                            ),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (isBill) "Pay" else "Mark Paid",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                        }
                     }
                 } else {
                     if (isBill) {
                         // For bills, they can unmark it paid too
                         TextButton(
-                            onClick = onPayToggle,
+                            onClick = {
+                                if (item.isSkipped) {
+                                    onSkipToggle?.invoke()
+                                } else {
+                                    onPayToggle()
+                                }
+                            },
                             modifier = Modifier
                                 .height(32.dp)
                                 .testTag("unpay_button_${item.itemType}_${item.id}"),
                             colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error
+                                contentColor = if (item.isSkipped) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.error
                             ),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                         ) {
                             Text(
-                                text = "Unpay",
+                                text = if (item.isSkipped) "Unskip" else "Unpay",
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
                             )
                         }
@@ -1314,12 +1187,25 @@ fun DashboardScreen(
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Icon(
                                                     imageVector = when (cat) {
-                                                        "Rent" -> Icons.Default.Home
+                                                        "Rent", "Rent & Housing" -> Icons.Default.Home
                                                         "Electricity" -> Icons.Default.Bolt
                                                         "Water" -> Icons.Default.Opacity
+                                                        "Gas & Fuel" -> Icons.Default.LocalGasStation
+                                                        "Internet", "Internet & Wi-Fi" -> Icons.Default.Wifi
+                                                        "Mobile & Phone" -> Icons.Default.PhoneAndroid
+                                                        "DTH & Cable TV" -> Icons.Default.Tv
+                                                        "Groceries & Milk" -> Icons.Default.ShoppingCart
                                                         "Credit Card" -> Icons.Default.CreditCard
-                                                        "Internet" -> Icons.Default.Wifi
+                                                        "Loan & EMI" -> Icons.Default.AccountBalance
                                                         "Insurance" -> Icons.Default.Shield
+                                                        "Maid & Services" -> Icons.Default.Person
+                                                        "Health & Gym", "Fitness" -> Icons.Default.Favorite
+                                                        "Education & School" -> Icons.Default.School
+                                                        "Entertainment" -> Icons.Default.PlayArrow
+                                                        "Gaming" -> Icons.Default.Gamepad
+                                                        "Music" -> Icons.Default.MusicNote
+                                                        "Productivity" -> Icons.Default.Work
+                                                        "Utility" -> Icons.Default.Build
                                                         else -> Icons.Default.Receipt
                                                     },
                                                     contentDescription = null,

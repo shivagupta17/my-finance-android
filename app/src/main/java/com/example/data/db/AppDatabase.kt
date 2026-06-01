@@ -9,7 +9,7 @@ import com.example.data.model.Subscription
 import com.example.data.model.SubscriptionPayment
 import com.example.data.model.BillPayment
 
-@Database(entities = [Bill::class, Subscription::class, SubscriptionPayment::class, BillPayment::class], version = 5, exportSchema = false)
+@Database(entities = [Bill::class, Subscription::class, SubscriptionPayment::class, BillPayment::class], version = 7, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun billDao(): BillDao
     abstract fun subscriptionDao(): SubscriptionDao

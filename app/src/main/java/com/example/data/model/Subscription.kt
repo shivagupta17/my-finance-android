@@ -20,7 +20,8 @@ data class Subscription(
     val isAutoNotify: Boolean = true,
     val customReminderDaysBefore: Int = 2, // Default 2 days before
     val isActive: Boolean = true,
-    val notes: String = ""
+    val notes: String = "",
+    val status: String = "Active" // "Active", "Paused", "Cancelled"
 ) {
     // Check if the subscription is renewing soon (e.g., within 7 days)
     fun isRenewingSoon(): Boolean {
@@ -75,5 +76,43 @@ data class Subscription(
             "Quarterly" -> diffMonths % 3 == 0
             else -> true // Monthly
         }
+    }
+
+    // Days remaining in selected month-year
+    fun daysRemainingForMonthYear(monthYear: String): Int {
+        if (!isActive) return 0
+        
+        val sdf = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+        val todayCal = Calendar.getInstance()
+        
+        val renewalCal = Calendar.getInstance().apply { timeInMillis = renewalDate }
+        val renewalDay = renewalCal.get(Calendar.DAY_OF_MONTH)
+        
+        val targetMonthCal = Calendar.getInstance()
+        try {
+            val date = sdf.parse(monthYear)
+            if (date != null) {
+                targetMonthCal.time = date
+            }
+        } catch (e: Exception) {
+            return daysRemaining()
+        }
+        
+        val maxDays = targetMonthCal.getActualMaximum(Calendar.DAY_OF_MONTH)
+        val targetDay = if (renewalDay > maxDays) maxDays else renewalDay
+        
+        targetMonthCal.set(Calendar.DAY_OF_MONTH, targetDay)
+        targetMonthCal.set(Calendar.HOUR_OF_DAY, 9)
+        targetMonthCal.set(Calendar.MINUTE, 0)
+        targetMonthCal.set(Calendar.SECOND, 0)
+        targetMonthCal.set(Calendar.MILLISECOND, 0)
+        
+        todayCal.set(Calendar.HOUR_OF_DAY, 0)
+        todayCal.set(Calendar.MINUTE, 0)
+        todayCal.set(Calendar.SECOND, 0)
+        todayCal.set(Calendar.MILLISECOND, 0)
+        
+        val diff = targetMonthCal.timeInMillis - todayCal.timeInMillis
+        return (diff / (1000L * 60 * 60 * 24)).toInt()
     }
 }

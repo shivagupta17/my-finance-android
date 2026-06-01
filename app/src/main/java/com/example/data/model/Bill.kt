@@ -16,11 +16,19 @@ data class Bill(
     val dueDay: Int, // Day of month (1-31)
     val customReminderDaysBefore: Int = 1, // Number of days before due date to notify
     val paidMonths: String = "", // Comma-separated string of "yyyy-MM" (e.g., "2026-04,2026-05")
+    val skippedMonths: String = "", // Comma-separated string of "yyyy-MM" (e.g., "2026-04,2026-05")
     val notes: String = "",
     val billingCycle: String = "Monthly", // Monthly, Quarterly, Yearly, One-time
     val startMonthYear: String = "", // yyyy-MM
     val isVariable: Boolean = false
 ) {
+    // Helper to check if this bill is skipped in a selected month-year
+    fun isSkippedForMonthYear(monthYear: String): Boolean {
+        val skipped = (skippedMonths as? String) ?: ""
+        if (skipped.isEmpty()) return false
+        val skippedList = skipped.split(",")
+        return skippedList.contains(monthYear)
+    }
     // Helper to check if this bill is due in a selected month-year
     fun isDueInMonthYear(monthYear: String): Boolean {
         val sdf = SimpleDateFormat("yyyy-MM", Locale.getDefault())
@@ -116,5 +124,38 @@ data class Bill(
             // Due date has passed and is unpaid (overdue)
             return targetDay - currentDay // Negative number represents overdue days
         }
+    }
+
+    // Days remaining in selected month-year
+    fun daysRemainingForMonthYear(monthYear: String): Int {
+        val sdf = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+        val todayCal = Calendar.getInstance()
+        
+        val targetMonthCal = Calendar.getInstance()
+        try {
+            val date = sdf.parse(monthYear)
+            if (date != null) {
+                targetMonthCal.time = date
+            }
+        } catch (e: Exception) {
+            return daysRemaining()
+        }
+        
+        val maxDays = targetMonthCal.getActualMaximum(Calendar.DAY_OF_MONTH)
+        val targetDay = if (dueDay > maxDays) maxDays else dueDay
+        
+        targetMonthCal.set(Calendar.DAY_OF_MONTH, targetDay)
+        targetMonthCal.set(Calendar.HOUR_OF_DAY, 9) // Default 9:00 AM
+        targetMonthCal.set(Calendar.MINUTE, 0)
+        targetMonthCal.set(Calendar.SECOND, 0)
+        targetMonthCal.set(Calendar.MILLISECOND, 0)
+        
+        todayCal.set(Calendar.HOUR_OF_DAY, 0)
+        todayCal.set(Calendar.MINUTE, 0)
+        todayCal.set(Calendar.SECOND, 0)
+        todayCal.set(Calendar.MILLISECOND, 0)
+        
+        val diff = targetMonthCal.timeInMillis - todayCal.timeInMillis
+        return (diff / (1000L * 60 * 60 * 24)).toInt()
     }
 }

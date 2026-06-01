@@ -10,6 +10,7 @@ data class SubscriptionPayment(
     val subscriptionName: String,
     val amount: Double,
     val paymentDate: Long, // timestamp when user marked paid
+    val monthYear: String = "", // "yyyy-MM" corresponding to the payment month
     val billingCycle: String,
     val paymentSource: String,
     val platform: String,

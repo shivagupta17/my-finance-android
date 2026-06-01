@@ -26,7 +26,7 @@ class CriticalAlertReceiver : BroadcastReceiver() {
 
     companion object {
         const val CHANNEL_ID = "critical_payment_alerts"
-        const val CHANNEL_NAME = "Critical Due Alerts"
+        const val CHANNEL_NAME = "Payment Due Alerts"
 
         const val ACTION_CHECK_ALERTS = "com.example.action.CHECK_ALERTS"
         const val ACTION_MARK_PAID = "com.example.action.MARK_PAID"
@@ -49,7 +49,11 @@ class CriticalAlertReceiver : BroadcastReceiver() {
             )
             val triggerTime = System.currentTimeMillis() + (hours * 60L * 60 * 1000)
             try {
-                alarmManager.set(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && alarmManager.canScheduleExactAlarms()) {
+                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+                } else {
+                    alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -66,6 +70,24 @@ class CriticalAlertReceiver : BroadcastReceiver() {
                 when (action) {
                     ACTION_CHECK_ALERTS -> {
                         checkAndNotify(context, db)
+                        // Reschedule the next check so that it runs periodically even when app is closed/in background
+                        scheduleNextCheck(context, 1)
+                    }
+                    Intent.ACTION_BOOT_COMPLETED -> {
+                        // Restart periodic check
+                        scheduleNextCheck(context, 1)
+                        
+                        // Reschedule all active bill reminders
+                        val bills = db.billDao().getAllBillsList()
+                        bills.forEach { bill ->
+                            ReminderScheduler.scheduleBillReminder(context, bill)
+                        }
+                        
+                        // Reschedule all active subscription reminders
+                        val subscriptions = db.subscriptionDao().getAllSubscriptionsList()
+                        subscriptions.forEach { sub ->
+                            ReminderScheduler.scheduleSubscriptionReminder(context, sub)
+                        }
                     }
                     ACTION_MARK_PAID -> {
                         val itemId = intent.getIntExtra(EXTRA_ITEM_ID, -1)
@@ -98,14 +120,14 @@ class CriticalAlertReceiver : BroadcastReceiver() {
         val bills = db.billDao().getAllBillsList()
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // Create high importance critical alerts channel
+        // Create high importance alerts channel
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Critical reminder channel for bill and subscription deadlines"
+                description = "Reminder channel for bill and subscription deadlines"
                 enableVibration(true)
                 setShowBadge(true)
             }
@@ -118,7 +140,8 @@ class CriticalAlertReceiver : BroadcastReceiver() {
             val isDateReached = currentDay >= bill.dueDay
 
             if (isDue && !isPaid && isDateReached) {
-                showCriticalNotification(context, notificationManager, bill.id, "BILL", bill.name, bill.amount, bill.isVariable, "Day ${bill.dueDay} of this month")
+                val isOverdue = currentDay > bill.dueDay
+                showCriticalNotification(context, notificationManager, bill.id, "BILL", bill.name, bill.amount, bill.isVariable, "Day ${bill.dueDay} of this month", isOverdue)
             }
         }
 
@@ -127,7 +150,8 @@ class CriticalAlertReceiver : BroadcastReceiver() {
         subscriptions.forEach { sub ->
             if (sub.isActive && currentTime >= sub.renewalDate) {
                 val formattedDate = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(sub.renewalDate))
-                showCriticalNotification(context, notificationManager, sub.id, "SUB", sub.name, sub.amount, false, formattedDate)
+                val isOverdue = currentTime > sub.renewalDate
+                showCriticalNotification(context, notificationManager, sub.id, "SUB", sub.name, sub.amount, false, formattedDate, isOverdue)
             }
         }
     }
@@ -140,7 +164,8 @@ class CriticalAlertReceiver : BroadcastReceiver() {
         name: String,
         amount: Double,
         isVariable: Boolean,
-        dueDateStr: String
+        dueDateStr: String,
+        isOverdue: Boolean
     ) {
         val notificationId = if (itemType == "BILL") 10000 + itemId else 20000 + itemId
 
@@ -169,8 +194,9 @@ class CriticalAlertReceiver : BroadcastReceiver() {
         )
 
         // Title and body message
-        val title = "CRITICAL DUE: $name"
-        val message = "Your $itemType of ₹${String.format("%.2f", amount)} is unpaid (Due date: $dueDateStr). Tap to manage."
+        val title = if (isOverdue) "Overdue: $name" else "Due: $name"
+        val itemLabel = if (itemType == "BILL") "bill" else "subscription"
+        val message = "Your $itemLabel of ₹${String.format("%.2f", amount)} is unpaid (Due date: $dueDateStr). Tap to manage."
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
