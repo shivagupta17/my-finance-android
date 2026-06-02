@@ -52,6 +52,12 @@ fun SubscriptionsScreen(
     
     var activeSubTab by remember { mutableStateOf("My Subscriptions") } // "My Subscriptions", "Payment History"
 
+    var showDeleteSubConfirmDialog by remember { mutableStateOf(false) }
+    var subToDelete by remember { mutableStateOf<Subscription?>(null) }
+
+    var showDeletePaymentConfirmDialog by remember { mutableStateOf(false) }
+    var paymentToDelete by remember { mutableStateOf<SubscriptionPayment?>(null) }
+
     Box(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -161,7 +167,10 @@ fun SubscriptionsScreen(
                                     selectedSubForEdit = sub
                                     showAddEditDialog = true
                                 },
-                                onDeleteClick = { viewModel.deleteSubscription(sub) }
+                                onDeleteClick = {
+                                    subToDelete = sub
+                                    showDeleteSubConfirmDialog = true
+                                }
                             )
                         }
                     }
@@ -240,7 +249,10 @@ fun SubscriptionsScreen(
                             items(items = paymentsInMonth, key = { "payment_${it.id}" }) { payment ->
                                 SubscriptionPaymentRowItem(
                                     payment = payment,
-                                    onDeleteClick = { viewModel.deletePayment(payment) }
+                                    onDeleteClick = {
+                                        paymentToDelete = payment
+                                        showDeletePaymentConfirmDialog = true
+                                    }
                                 )
                             }
                         }
@@ -322,6 +334,125 @@ fun SubscriptionsScreen(
                 onConfirm = { subscription, monthYear, amount, paymentDate, overwrite ->
                     viewModel.addHistoricalSubscriptionPayment(subscription, monthYear, amount, paymentDate, overwrite)
                     showAddHistoricalPaymentDialog = false
+                }
+            )
+        }
+
+        if (showDeleteSubConfirmDialog && subToDelete != null) {
+            AlertDialog(
+                onDismissRequest = { 
+                    showDeleteSubConfirmDialog = false
+                    subToDelete = null
+                },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = "Warning",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        Text(
+                            text = "Delete Subscription?",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
+                },
+                text = {
+                    Text(
+                        text = "Are you sure you want to delete the subscription '${subToDelete?.name ?: ""}'? This will also permanently delete all associated payment history logs for this subscription. This action cannot be undone.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            subToDelete?.let { viewModel.deleteSubscription(it) }
+                            showDeleteSubConfirmDialog = false
+                            subToDelete = null
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        ),
+                        modifier = Modifier.testTag("confirm_delete_subscription_button")
+                    ) {
+                        Text("Delete")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showDeleteSubConfirmDialog = false
+                            subToDelete = null
+                        },
+                        modifier = Modifier.testTag("dismiss_delete_subscription_button")
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
+        if (showDeletePaymentConfirmDialog && paymentToDelete != null) {
+            val payment = paymentToDelete!!
+            val sdf = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
+            val formattedDate = remember(payment.paymentDate) { sdf.format(Date(payment.paymentDate)) }
+            AlertDialog(
+                onDismissRequest = { 
+                    showDeletePaymentConfirmDialog = false
+                    paymentToDelete = null
+                },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = "Warning",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        Text(
+                            text = "Delete Payment Log?",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
+                },
+                text = {
+                    Text(
+                        text = "Are you sure you want to delete the payment entry of ${payment.amount} for month ${payment.monthYear} paid on $formattedDate? This status of the subscription will revert to unpaid/unskipped for that period.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.deletePayment(payment)
+                            showDeletePaymentConfirmDialog = false
+                            paymentToDelete = null
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        ),
+                        modifier = Modifier.testTag("confirm_delete_subscription_payment_button")
+                    ) {
+                        Text("Delete")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showDeletePaymentConfirmDialog = false
+                            paymentToDelete = null
+                        },
+                        modifier = Modifier.testTag("dismiss_delete_subscription_payment_button")
+                    ) {
+                        Text("Cancel")
+                    }
                 }
             )
         }

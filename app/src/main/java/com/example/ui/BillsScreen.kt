@@ -52,6 +52,12 @@ fun BillsScreen(
     // Screen Main Tabs: "My Bills", "Payment History"
     var activeBillTab by remember { mutableStateOf("My Bills") } // "My Bills", "Payment History"
 
+    var showDeleteBillConfirmDialog by remember { mutableStateOf(false) }
+    var billToDelete by remember { mutableStateOf<Bill?>(null) }
+
+    var showDeleteBillPaymentConfirmDialog by remember { mutableStateOf(false) }
+    var billPaymentToDelete by remember { mutableStateOf<BillPayment?>(null) }
+
     Box(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -160,7 +166,10 @@ fun BillsScreen(
                                     selectedBillForEdit = bill
                                     showAddEditDialog = true
                                 },
-                                onDeleteClick = { viewModel.deleteBill(bill) }
+                                onDeleteClick = {
+                                    billToDelete = bill
+                                    showDeleteBillConfirmDialog = true
+                                }
                             )
                         }
                     }
@@ -239,7 +248,10 @@ fun BillsScreen(
                             items(items = paymentsInMonth, key = { "payment_${it.id}" }) { payment ->
                                 BillPaymentRowItem(
                                     payment = payment,
-                                    onDeleteClick = { viewModel.deleteBillPayment(payment) }
+                                    onDeleteClick = {
+                                        billPaymentToDelete = payment
+                                        showDeleteBillPaymentConfirmDialog = true
+                                    }
                                 )
                             }
                         }
@@ -316,6 +328,125 @@ fun BillsScreen(
                 onConfirm = { bill, monthYear, amount, paymentDate, overwrite ->
                     viewModel.addHistoricalBillPayment(bill, monthYear, amount, paymentDate, overwrite)
                     showAddHistoricalPaymentDialog = false
+                }
+            )
+        }
+
+        if (showDeleteBillConfirmDialog && billToDelete != null) {
+            AlertDialog(
+                onDismissRequest = { 
+                    showDeleteBillConfirmDialog = false
+                    billToDelete = null
+                },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = "Warning",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        Text(
+                            text = "Delete Bill?",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
+                },
+                text = {
+                    Text(
+                        text = "Are you sure you want to delete '${billToDelete?.name ?: ""}'? This will also permanently delete all associated payment history logs for this bill. This action cannot be undone.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            billToDelete?.let { viewModel.deleteBill(it) }
+                            showDeleteBillConfirmDialog = false
+                            billToDelete = null
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        ),
+                        modifier = Modifier.testTag("confirm_delete_bill_button")
+                    ) {
+                        Text("Delete")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showDeleteBillConfirmDialog = false
+                            billToDelete = null
+                        },
+                        modifier = Modifier.testTag("dismiss_delete_bill_button")
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
+        if (showDeleteBillPaymentConfirmDialog && billPaymentToDelete != null) {
+            val payment = billPaymentToDelete!!
+            val sdf = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
+            val formattedDate = remember(payment.paymentDate) { sdf.format(Date(payment.paymentDate)) }
+            AlertDialog(
+                onDismissRequest = { 
+                    showDeleteBillPaymentConfirmDialog = false
+                    billPaymentToDelete = null
+                },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = "Warning",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        Text(
+                            text = "Delete Payment Log?",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
+                },
+                text = {
+                    Text(
+                        text = "Are you sure you want to delete the payment entry of ${payment.amount} for month ${payment.monthYear} paid on $formattedDate? This status of the bill will revert to unpaid/unskipped for that period.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.deleteBillPayment(payment)
+                            showDeleteBillPaymentConfirmDialog = false
+                            billPaymentToDelete = null
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        ),
+                        modifier = Modifier.testTag("confirm_delete_bill_payment_button")
+                    ) {
+                        Text("Delete")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showDeleteBillPaymentConfirmDialog = false
+                            billPaymentToDelete = null
+                        },
+                        modifier = Modifier.testTag("dismiss_delete_bill_payment_button")
+                    ) {
+                        Text("Cancel")
+                    }
                 }
             )
         }
