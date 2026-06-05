@@ -359,7 +359,8 @@ fun UpcomingPaymentRow(
                         text = item.name,
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
 
@@ -428,8 +429,8 @@ fun UpcomingPaymentRow(
                 val isVariableBill = isBill && parentItem is com.example.data.model.Bill && parentItem.isVariable
                 val costText = if (item.isSkipped) {
                     "Skipped"
-                } else if (isVariableBill) {
-                    if (item.amount <= 0.0) "Variable" else "Variable (~₹${String.format("%.2f", item.amount)})"
+                } else if (isVariableBill && item.amount <= 0.0) {
+                    "Variable"
                 } else {
                     "₹${String.format("%.2f", item.amount)}"
                 }

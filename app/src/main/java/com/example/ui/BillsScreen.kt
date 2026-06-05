@@ -211,8 +211,18 @@ fun BillsScreen(
                     val groupedBillPayments = remember(billPayments) {
                         billPayments.sortedByDescending { it.paymentDate }
                             .groupBy { payment ->
-                                val sdf = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
-                                sdf.format(Date(payment.paymentDate))
+                                val inputFormat = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+                                val outputFormat = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
+                                try {
+                                    val date = inputFormat.parse(payment.monthYear)
+                                    if (date != null) {
+                                        outputFormat.format(date)
+                                    } else {
+                                        outputFormat.format(Date(payment.paymentDate))
+                                    }
+                                } catch (e: Exception) {
+                                    outputFormat.format(Date(payment.paymentDate))
+                                }
                             }
                     }
 
@@ -515,21 +525,24 @@ fun BillRowItem(
                 Spacer(modifier = Modifier.width(10.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = bill.name,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text(
-                            text = bill.name,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp
-                            ),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(4.dp))
@@ -574,7 +587,7 @@ fun BillRowItem(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
                         text = "Due Day: ${bill.dueDay}",
@@ -585,8 +598,8 @@ fun BillRowItem(
 
                 // Cost display
                 Text(
-                    text = if (bill.isVariable) {
-                        if (bill.amount <= 0.0) "Variable" else "Variable (~₹${String.format("%.2f", bill.amount)})"
+                    text = if (bill.isVariable && bill.amount <= 0.0) {
+                        "Variable"
                     } else {
                         "₹${String.format("%.2f", bill.amount)}"
                     },
@@ -1200,6 +1213,29 @@ fun AddHistoricalBillPaymentDialog(
     LaunchedEffect(selectedBill) {
         if (selectedBill != null) {
             amountStr = selectedBill!!.amount.toString()
+        }
+    }
+
+    LaunchedEffect(selectedMonthOption) {
+        selectedMonthOption?.first?.let { monthYearStr ->
+            try {
+                val inputFormat = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+                val parsedDate = inputFormat.parse(monthYearStr)
+                if (parsedDate != null) {
+                    val cal = Calendar.getInstance()
+                    val currentCal = Calendar.getInstance()
+                    cal.time = parsedDate
+                    
+                    val currentDay = currentCal.get(Calendar.DAY_OF_MONTH)
+                    cal.set(Calendar.DAY_OF_MONTH, 1)
+                    val maxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                    cal.set(Calendar.DAY_OF_MONTH, currentDay.coerceAtMost(maxDay))
+                    
+                    paymentDateMillis = cal.timeInMillis
+                }
+            } catch (e: Exception) {
+                // Ignore parsing errors
+            }
         }
     }
 

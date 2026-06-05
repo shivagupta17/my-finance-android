@@ -212,8 +212,18 @@ fun SubscriptionsScreen(
                     val groupedSubPayments = remember(payments) {
                         payments.sortedByDescending { it.paymentDate }
                             .groupBy { payment ->
-                                val sdf = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
-                                sdf.format(Date(payment.paymentDate))
+                                val inputFormat = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+                                val outputFormat = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
+                                try {
+                                    val date = inputFormat.parse(payment.monthYear)
+                                    if (date != null) {
+                                        outputFormat.format(date)
+                                    } else {
+                                        outputFormat.format(Date(payment.paymentDate))
+                                    }
+                                } catch (e: Exception) {
+                                    outputFormat.format(Date(payment.paymentDate))
+                                }
                             }
                     }
 
@@ -533,20 +543,24 @@ fun SubscriptionRowItem(
                 Spacer(modifier = Modifier.width(10.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = subscription.name,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = if (status == "Cancelled") MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurface
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text(
-                            text = subscription.name,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                color = if (status == "Cancelled") MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurface
-                            ),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
                         // Tag cycle
                         Box(
                             modifier = Modifier
@@ -561,6 +575,8 @@ fun SubscriptionRowItem(
                             )
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
                         text = "Source: ${subscription.paymentSource}",
@@ -1320,6 +1336,29 @@ fun AddHistoricalSubscriptionPaymentDialog(
     LaunchedEffect(selectedSub) {
         if (selectedSub != null) {
             amountStr = selectedSub!!.amount.toString()
+        }
+    }
+
+    LaunchedEffect(selectedMonthOption) {
+        selectedMonthOption?.first?.let { monthYearStr ->
+            try {
+                val inputFormat = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+                val parsedDate = inputFormat.parse(monthYearStr)
+                if (parsedDate != null) {
+                    val cal = Calendar.getInstance()
+                    val currentCal = Calendar.getInstance()
+                    cal.time = parsedDate
+                    
+                    val currentDay = currentCal.get(Calendar.DAY_OF_MONTH)
+                    cal.set(Calendar.DAY_OF_MONTH, 1)
+                    val maxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                    cal.set(Calendar.DAY_OF_MONTH, currentDay.coerceAtMost(maxDay))
+                    
+                    paymentDateMillis = cal.timeInMillis
+                }
+            } catch (e: Exception) {
+                // Ignore parsing errors
+            }
         }
     }
 
