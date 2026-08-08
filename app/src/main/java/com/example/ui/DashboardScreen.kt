@@ -209,18 +209,19 @@ fun MonthSelector(
 ) {
     val selectedMonthYear by viewModel.selectedMonthYear.collectAsState()
     val options = viewModel.getMonthYearOptions()
-    var expanded by remember { mutableStateOf(false) }
+    var showPicker by remember { mutableStateOf(false) }
 
     val currentLabel = options.find { it.first == selectedMonthYear }?.second ?: selectedMonthYear
 
     Box(modifier = modifier) {
         Card(
-            onClick = { expanded = true },
+            onClick = { showPicker = true },
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
             ),
             shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+            modifier = Modifier.testTag("month_selector_button")
         ) {
             Row(
                 modifier = Modifier
@@ -230,7 +231,7 @@ fun MonthSelector(
             ) {
                 Icon(
                     imageVector = Icons.Default.CalendarMonth,
-                    contentDescription = null,
+                    contentDescription = "Select Month",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(18.dp)
                 )
@@ -240,7 +241,7 @@ fun MonthSelector(
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 Icon(
-                    imageVector = if (expanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                    imageVector = Icons.Default.ArrowDropDown,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.onPrimaryContainer
@@ -248,27 +249,14 @@ fun MonthSelector(
             }
         }
 
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier.testTag("month_selector_dropdown")
-        ) {
-            options.forEach { (value, label) ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = label,
-                            fontWeight = if (value == selectedMonthYear) FontWeight.Bold else FontWeight.Normal,
-                            color = if (value == selectedMonthYear) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                        )
-                    },
-                    onClick = {
-                        viewModel.selectMonthYear(value)
-                        expanded = false
-                    },
-                    modifier = Modifier.testTag("month_option_$value")
-                )
-            }
+        if (showPicker) {
+            MonthYearPickerDialog(
+                initialMonthYear = selectedMonthYear,
+                onDismissRequest = { showPicker = false },
+                onMonthYearSelected = { newMonthYear, _ ->
+                    viewModel.selectMonthYear(newMonthYear)
+                }
+            )
         }
     }
 }

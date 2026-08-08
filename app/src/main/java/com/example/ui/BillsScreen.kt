@@ -829,8 +829,8 @@ fun AddEditBillDialog(
         val sdfValue = SimpleDateFormat("yyyy-MM", Locale.getDefault())
         val sdfLabel = SimpleDateFormat("MMM yyyy", Locale.getDefault())
         val cal = Calendar.getInstance()
-        cal.add(Calendar.MONTH, -3)
-        repeat(12) {
+        cal.add(Calendar.MONTH, -24)
+        repeat(37) {
             list.add(Pair(sdfValue.format(cal.time), sdfLabel.format(cal.time)))
             cal.add(Calendar.MONTH, 1)
         }
@@ -947,53 +947,47 @@ fun AddEditBillDialog(
                     }
                 }
 
-                // Billing Cycle frequency selector
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = "Billing Frequency",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                // Billing Frequency Dropdown
+                var cycleExpanded by remember { mutableStateOf(false) }
+                val cycleOptions = listOf("Monthly", "Quarterly", "Yearly", "One-time")
+
+                ExposedDropdownMenuBox(
+                    expanded = cycleExpanded,
+                    onExpandedChange = { cycleExpanded = !cycleExpanded },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        readOnly = true,
+                        value = billingCycle,
+                        onValueChange = {},
+                        label = { Text("Billing Frequency") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = cycleExpanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                            .testTag("bill_cycle_dropdown"),
+                        shape = RoundedCornerShape(12.dp)
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ExposedDropdownMenu(
+                        expanded = cycleExpanded,
+                        onDismissRequest = { cycleExpanded = false }
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            listOf("Monthly", "Quarterly").forEach { cycle ->
-                                val isSelected = billingCycle == cycle
-                                CompactSelectableChip(
-                                    selected = isSelected,
-                                    onClick = { billingCycle = cycle },
-                                    text = cycle,
-                                    modifier = Modifier.weight(1f).testTag("bill_cycle_chip_$cycle")
-                                )
-                            }
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            listOf("Yearly", "One-time").forEach { cycle ->
-                                val isSelected = billingCycle == cycle
-                                CompactSelectableChip(
-                                    selected = isSelected,
-                                    onClick = { billingCycle = cycle },
-                                    text = cycle,
-                                    modifier = Modifier.weight(1f).testTag("bill_cycle_chip_$cycle")
-                                )
-                            }
+                        cycleOptions.forEach { cycle ->
+                            DropdownMenuItem(
+                                text = { Text(cycle) },
+                                onClick = {
+                                    billingCycle = cycle
+                                    cycleExpanded = false
+                                },
+                                modifier = Modifier.testTag("bill_cycle_option_$cycle")
+                            )
                         }
                     }
                 }
 
                 // Bill Starting Month
                 if (true) {
-                    var startMonthExpanded by remember { mutableStateOf(false) }
+                    var showMonthPicker by remember { mutableStateOf(false) }
                     val currentLabel = monthOptions.find { it.first == startMonthYear }?.second ?: startMonthYear
                     val labelText = when (billingCycle) {
                         "One-time", "One-Time" -> "Payment Month"
@@ -1001,77 +995,135 @@ fun AddEditBillDialog(
                         else -> "Start Cycle Month"
                     }
                     
-                    ExposedDropdownMenuBox(
-                        expanded = startMonthExpanded,
-                        onExpandedChange = { startMonthExpanded = !startMonthExpanded },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        OutlinedTextField(
-                            value = currentLabel,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text(labelText) },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = startMonthExpanded) },
-                            modifier = Modifier
-                                .menuAnchor()
-                                .fillMaxWidth()
-                                .testTag("bill_start_month_dropdown"),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        ExposedDropdownMenu(
-                            expanded = startMonthExpanded,
-                            onDismissRequest = { startMonthExpanded = false }
-                        ) {
-                            monthOptions.forEach { opt ->
-                                DropdownMenuItem(
-                                    text = { Text(opt.second) },
-                                    onClick = {
-                                        startMonthYear = opt.first
-                                        startMonthExpanded = false
-                                    },
-                                    modifier = Modifier.testTag("start_month_option_${opt.first}")
-                                )
+                    OutlinedTextField(
+                        value = currentLabel,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text(labelText) },
+                        trailingIcon = {
+                            IconButton(onClick = { showMonthPicker = true }) {
+                                Icon(Icons.Default.CalendarToday, contentDescription = "Pick Month")
                             }
-                        }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showMonthPicker = true }
+                            .testTag("bill_start_month_picker"),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    if (showMonthPicker) {
+                        MonthYearPickerDialog(
+                            initialMonthYear = startMonthYear,
+                            onDismissRequest = { showMonthPicker = false },
+                            onMonthYearSelected = { newMonthYear, _ ->
+                                startMonthYear = newMonthYear
+                            }
+                        )
                     }
                 }
 
-                // Due Day input (1 - 31)
-                Column(modifier = Modifier.fillMaxWidth()) {
+                // Due Day User-Friendly Selection
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     Text(
-                        text = "Due Day: Day $dueDay of the month",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Slider(
-                        value = dueDay.toFloat(),
-                        onValueChange = { dueDay = it.toInt() },
-                        valueRange = 1f..31f,
-                        steps = 29,
-                        modifier = Modifier.fillMaxWidth().testTag("bill_due_day_slider")
-                    )
-                }
-
-                // Reminder Days before (1, 2, 3, 5, 7)
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = "Remind me $reminderDays day(s) before",
+                        text = "Due Day of Month",
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        listOf(1, 2, 3, 5, 7).forEach { days ->
-                            val isSelected = reminderDays == days
-                            CompactSelectableChip(
-                                selected = isSelected,
-                                onClick = { reminderDays = days },
-                                text = "${days}d",
-                                modifier = Modifier.weight(1f).testTag("reminder_chip_$days")
+                        FilledTonalIconButton(
+                            onClick = { if (dueDay > 1) dueDay -= 1 },
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Icon(Icons.Default.Remove, contentDescription = "Decrease Due Day")
+                        }
+
+                        OutlinedTextField(
+                            value = dueDay.toString(),
+                            onValueChange = { input ->
+                                val filtered = input.filter { it.isDigit() }
+                                val parsed = filtered.toIntOrNull()
+                                if (parsed != null && parsed in 1..31) {
+                                    dueDay = parsed
+                                } else if (filtered.isEmpty()) {
+                                    dueDay = 1
+                                }
+                            },
+                            label = { Text("Due Day (1-31)") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("bill_due_day_input"),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+
+                        FilledTonalIconButton(
+                            onClick = { if (dueDay < 31) dueDay += 1 },
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Increase Due Day")
+                        }
+                    }
+                }
+
+                // Remind Me User-Friendly Selection
+                var reminderExpanded by remember { mutableStateOf(false) }
+                val reminderOptions = listOf(
+                    0 to "On due date (0 days before)",
+                    1 to "1 day before due date",
+                    2 to "2 days before due date",
+                    3 to "3 days before due date",
+                    5 to "5 days before due date",
+                    7 to "7 days (1 week) before"
+                )
+                val currentReminderText = reminderOptions.find { it.first == reminderDays }?.second
+                    ?: "$reminderDays days before due date"
+
+                ExposedDropdownMenuBox(
+                    expanded = reminderExpanded,
+                    onExpandedChange = { reminderExpanded = !reminderExpanded },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        readOnly = true,
+                        value = currentReminderText,
+                        onValueChange = {},
+                        label = { Text("Remind Me") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.NotificationsActive,
+                                contentDescription = "Reminder",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = reminderExpanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                            .testTag("bill_reminder_dropdown"),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    ExposedDropdownMenu(
+                        expanded = reminderExpanded,
+                        onDismissRequest = { reminderExpanded = false }
+                    ) {
+                        reminderOptions.forEach { (days, label) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = {
+                                    reminderDays = days
+                                    reminderExpanded = false
+                                },
+                                modifier = Modifier.testTag("reminder_option_$days")
                             )
                         }
                     }
@@ -1300,39 +1352,33 @@ fun AddHistoricalBillPaymentDialog(
                         }
                     }
 
-                    // Month Selector Dropdown
-                    ExposedDropdownMenuBox(
-                        expanded = monthDropdownExpanded,
-                        onExpandedChange = { monthDropdownExpanded = !monthDropdownExpanded },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        OutlinedTextField(
-                            value = selectedMonthOption?.second ?: "",
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Billing Month") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = monthDropdownExpanded) },
-                            modifier = Modifier
-                                .menuAnchor()
-                                .fillMaxWidth()
-                                .testTag("historical_month_dropdown"),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        ExposedDropdownMenu(
-                            expanded = monthDropdownExpanded,
-                            onDismissRequest = { monthDropdownExpanded = false }
-                        ) {
-                            monthOptions.forEach { option ->
-                                DropdownMenuItem(
-                                    text = { Text(option.second) },
-                                    onClick = {
-                                        selectedMonthOption = option
-                                        monthDropdownExpanded = false
-                                    },
-                                    modifier = Modifier.testTag("historical_month_option_${option.first}")
-                                )
+                    // Month Selector Calendar Picker
+                    var showMonthPicker by remember { mutableStateOf(false) }
+                    OutlinedTextField(
+                        value = selectedMonthOption?.second ?: "",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Billing Month") },
+                        trailingIcon = {
+                            IconButton(onClick = { showMonthPicker = true }) {
+                                Icon(Icons.Default.CalendarToday, contentDescription = "Pick Billing Month")
                             }
-                        }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showMonthPicker = true }
+                            .testTag("historical_month_picker"),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    if (showMonthPicker) {
+                        MonthYearPickerDialog(
+                            initialMonthYear = selectedMonthOption?.first,
+                            onDismissRequest = { showMonthPicker = false },
+                            onMonthYearSelected = { newMonthYear, label ->
+                                selectedMonthOption = Pair(newMonthYear, label)
+                            }
+                        )
                     }
 
                     // Duplicate Warning Banner

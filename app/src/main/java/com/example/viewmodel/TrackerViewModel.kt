@@ -62,10 +62,10 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
     fun getMonthYearOptions(): List<Pair<String, String>> {
         val list = mutableListOf<Pair<String, String>>()
         val cal = Calendar.getInstance()
-        cal.add(Calendar.MONTH, -6)
+        cal.add(Calendar.MONTH, -24) // Allow going back up to 2 years (24 months)
         val valueSdf = SimpleDateFormat("yyyy-MM", Locale.getDefault())
         val displaySdf = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
-        for (i in 0..12) {
+        for (i in 0..36) { // 24 months past + current + 12 months future
             list.add(Pair(valueSdf.format(cal.time), displaySdf.format(cal.time)))
             cal.add(Calendar.MONTH, 1)
         }

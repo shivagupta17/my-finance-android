@@ -1046,22 +1046,32 @@ fun AddEditSubscriptionDialog(
                     }
                 }
 
-                // renewal Date Picker trigger row
+                // Renewal Date Picker trigger row
                 OutlinedTextField(
                     readOnly = true,
                     value = displayedDateStr,
                     onValueChange = {},
                     label = { Text("Next Due Date") },
-                    trailingIcon = {
+                    leadingIcon = {
                         Icon(
-                            imageVector = Icons.Default.CalendarToday,
-                            contentDescription = "Pick Date",
-                            modifier = Modifier.clickable {
+                            imageVector = Icons.Default.Event,
+                            contentDescription = "Due Date",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    },
+                    trailingIcon = {
+                        IconButton(
+                            onClick = {
                                 showDatePicker(context, selectedDateMillis) { newMillis ->
                                     selectedDateMillis = newMillis
                                 }
                             }
-                        )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CalendarToday,
+                                contentDescription = "Pick Date"
+                            )
+                        }
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1070,7 +1080,8 @@ fun AddEditSubscriptionDialog(
                                 selectedDateMillis = newMillis
                             }
                         }
-                        .testTag("input_sub_date")
+                        .testTag("input_sub_date"),
+                    shape = RoundedCornerShape(12.dp)
                 )
 
                 // Custom Notification section
@@ -1101,69 +1112,58 @@ fun AddEditSubscriptionDialog(
                     }
 
                     if (autoNotify) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 4.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        var subReminderExpanded by remember { mutableStateOf(false) }
+                        val currentDaysVal = customReminderDaysStr.toIntOrNull() ?: 2
+                        val subReminderOptions = listOf(
+                            0 to "On due date (0 days before)",
+                            1 to "1 day before due date",
+                            2 to "2 days before due date",
+                            3 to "3 days before due date",
+                            5 to "5 days before due date",
+                            7 to "7 days (1 week) before"
+                        )
+                        val subCurrentReminderText = subReminderOptions.find { it.first == currentDaysVal }?.second
+                            ?: "$customReminderDaysStr days before due date"
+
+                        ExposedDropdownMenuBox(
+                            expanded = subReminderExpanded,
+                            onExpandedChange = { subReminderExpanded = !subReminderExpanded },
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = "Remind me days before due:",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                listOf(1, 2, 3, 5, 7).forEach { days ->
-                                    val daysStr = days.toString()
-                                    val isSelected = customReminderDaysStr == daysStr
-                                    
-                                    Surface(
-                                        selected = isSelected,
-                                        onClick = { customReminderDaysStr = daysStr },
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                        contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        border = BorderStroke(
-                                            width = 1.dp,
-                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-                                        ),
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(36.dp)
-                                            .testTag("sub_reminder_chip_$days")
-                                    ) {
-                                        Box(
-                                            modifier = Modifier.fillMaxSize(),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = "${days}d",
-                                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                            
                             OutlinedTextField(
-                                value = customReminderDaysStr,
-                                onValueChange = { 
-                                    if (it.all { char -> char.isDigit() }) {
-                                        customReminderDaysStr = it
-                                    }
+                                readOnly = true,
+                                value = subCurrentReminderText,
+                                onValueChange = {},
+                                label = { Text("Remind Me") },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.NotificationsActive,
+                                        contentDescription = "Reminder",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
                                 },
-                                label = { Text("Custom days before due") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                singleLine = true,
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = subReminderExpanded) },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .testTag("input_sub_reminder_days"),
+                                    .menuAnchor()
+                                    .testTag("sub_reminder_dropdown"),
                                 shape = RoundedCornerShape(12.dp)
                             )
+                            ExposedDropdownMenu(
+                                expanded = subReminderExpanded,
+                                onDismissRequest = { subReminderExpanded = false }
+                            ) {
+                                subReminderOptions.forEach { (days, label) ->
+                                    DropdownMenuItem(
+                                        text = { Text(label) },
+                                        onClick = {
+                                            customReminderDaysStr = days.toString()
+                                            subReminderExpanded = false
+                                        },
+                                        modifier = Modifier.testTag("sub_reminder_option_$days")
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1425,39 +1425,33 @@ fun AddHistoricalSubscriptionPaymentDialog(
                         }
                     }
 
-                    // Month Selector Dropdown
-                    ExposedDropdownMenuBox(
-                        expanded = monthDropdownExpanded,
-                        onExpandedChange = { monthDropdownExpanded = !monthDropdownExpanded },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        OutlinedTextField(
-                            value = selectedMonthOption?.second ?: "",
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Billing Month") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = monthDropdownExpanded) },
-                            modifier = Modifier
-                                .menuAnchor()
-                                .fillMaxWidth()
-                                .testTag("historical_sub_month_dropdown"),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        ExposedDropdownMenu(
-                            expanded = monthDropdownExpanded,
-                            onDismissRequest = { monthDropdownExpanded = false }
-                        ) {
-                            monthOptions.forEach { option ->
-                                DropdownMenuItem(
-                                    text = { Text(option.second) },
-                                    onClick = {
-                                        selectedMonthOption = option
-                                        monthDropdownExpanded = false
-                                    },
-                                    modifier = Modifier.testTag("historical_sub_month_option_${option.first}")
-                                )
+                    // Month Selector Calendar Picker
+                    var showMonthPicker by remember { mutableStateOf(false) }
+                    OutlinedTextField(
+                        value = selectedMonthOption?.second ?: "",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Billing Month") },
+                        trailingIcon = {
+                            IconButton(onClick = { showMonthPicker = true }) {
+                                Icon(Icons.Default.CalendarToday, contentDescription = "Pick Billing Month")
                             }
-                        }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showMonthPicker = true }
+                            .testTag("historical_sub_month_picker"),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    if (showMonthPicker) {
+                        MonthYearPickerDialog(
+                            initialMonthYear = selectedMonthOption?.first,
+                            onDismissRequest = { showMonthPicker = false },
+                            onMonthYearSelected = { newMonthYear, label ->
+                                selectedMonthOption = Pair(newMonthYear, label)
+                            }
+                        )
                     }
 
                     // Duplicate Warning Banner
