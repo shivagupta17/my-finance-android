@@ -137,9 +137,10 @@ class CriticalAlertReceiver : BroadcastReceiver() {
         bills.forEach { bill ->
             val isDue = bill.isDueInMonthYear(currentMonthYear)
             val isPaid = bill.isPaidForMonthYear(currentMonthYear)
+            val isSkipped = bill.isSkippedForMonthYear(currentMonthYear)
             val isDateReached = currentDay >= bill.dueDay
 
-            if (isDue && !isPaid && isDateReached) {
+            if (bill.isActive && isDue && !isPaid && !isSkipped && isDateReached) {
                 val isOverdue = currentDay > bill.dueDay
                 showCriticalNotification(context, notificationManager, bill.id, "BILL", bill.name, bill.amount, bill.isVariable, "Day ${bill.dueDay} of this month", isOverdue)
             }

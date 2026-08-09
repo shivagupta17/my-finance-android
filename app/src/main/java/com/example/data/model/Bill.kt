@@ -20,8 +20,15 @@ data class Bill(
     val notes: String = "",
     val billingCycle: String = "Monthly", // Monthly, Quarterly, Yearly, One-time
     val startMonthYear: String = "", // yyyy-MM
-    val isVariable: Boolean = false
+    val isVariable: Boolean = false,
+    val status: String = "Active" // "Active" or "Ended" (Completed/Paid Off/Closed)
 ) {
+    val isActive: Boolean
+        get() = status.equals("Active", ignoreCase = true)
+
+    val isEnded: Boolean
+        get() = status.equals("Ended", ignoreCase = true) || status.equals("Completed", ignoreCase = true) || status.equals("Closed", ignoreCase = true)
+
     // Helper to check if this bill is skipped in a selected month-year
     fun isSkippedForMonthYear(monthYear: String): Boolean {
         val skipped = (skippedMonths as? String) ?: ""
@@ -31,6 +38,7 @@ data class Bill(
     }
     // Helper to check if this bill is due in a selected month-year
     fun isDueInMonthYear(monthYear: String): Boolean {
+        if (!isActive) return false
         val sdf = SimpleDateFormat("yyyy-MM", Locale.getDefault())
         val startVal = (startMonthYear as? String) ?: ""
         val cycle = (billingCycle as? String) ?: "Monthly"

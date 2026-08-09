@@ -12,6 +12,11 @@ import java.util.Calendar
 object ReminderScheduler {
 
     fun scheduleBillReminder(context: Context, bill: Bill) {
+        if (!bill.isActive) {
+            cancelBillReminder(context, bill)
+            return
+        }
+
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
         
         // Calculate reminder time

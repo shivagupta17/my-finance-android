@@ -51,6 +51,7 @@ fun BillsScreen(
 
     // Screen Main Tabs: "My Bills", "Payment History"
     var activeBillTab by remember { mutableStateOf("My Bills") } // "My Bills", "Payment History"
+    var billStatusFilter by remember { mutableStateOf("Active") } // "Active", "Ended", "All"
 
     var showDeleteBillConfirmDialog by remember { mutableStateOf(false) }
     var billToDelete by remember { mutableStateOf<Bill?>(null) }
@@ -121,8 +122,38 @@ fun BillsScreen(
             }
 
             if (activeBillTab == "My Bills") {
+                val activeCount = bills.count { it.isActive }
+                val endedCount = bills.count { it.isEnded }
+                val filteredBills = remember(bills, billStatusFilter) {
+                    when (billStatusFilter) {
+                        "Active" -> bills.filter { it.isActive }
+                        "Ended" -> bills.filter { it.isEnded }
+                        else -> bills
+                    }
+                }
+
+                // Filter Sub-Chips Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        "Active" to "Active ($activeCount)",
+                        "Ended" to "Ended ($endedCount)",
+                        "All" to "All (${bills.size})"
+                    ).forEach { (key, label) ->
+                        val isSelected = billStatusFilter == key
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { billStatusFilter = key },
+                            label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                            modifier = Modifier.weight(1f).testTag("bill_filter_chip_$key")
+                        )
+                    }
+                }
+
                 // Bills Configuration List
-                if (bills.isEmpty()) {
+                if (filteredBills.isEmpty()) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -140,7 +171,7 @@ fun BillsScreen(
                                 modifier = Modifier.size(64.dp)
                             )
                             Text(
-                                text = "No bills configured",
+                                text = if (billStatusFilter == "Ended") "No ended/completed bills" else "No bills configured",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                             )
@@ -159,9 +190,10 @@ fun BillsScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         contentPadding = PaddingValues(bottom = 80.dp)
                     ) {
-                        items(items = bills, key = { it.id }) { bill ->
+                        items(items = filteredBills, key = { it.id }) { bill ->
                             BillRowItem(
                                 bill = bill,
+                                selectedMonthYear = selectedMonthYear,
                                 onEditClick = {
                                     selectedBillForEdit = bill
                                     showAddEditDialog = true
@@ -169,6 +201,12 @@ fun BillsScreen(
                                 onDeleteClick = {
                                     billToDelete = bill
                                     showDeleteBillConfirmDialog = true
+                                },
+                                onStatusChange = { newStatus ->
+                                    viewModel.setBillStatus(bill, newStatus)
+                                },
+                                onSkipToggle = {
+                                    viewModel.toggleBillSkipped(bill, selectedMonthYear)
                                 }
                             )
                         }
@@ -308,9 +346,9 @@ fun BillsScreen(
                 bill = selectedBillForEdit,
                 defaultMonthYear = selectedMonthYear,
                 onDismiss = { showAddEditDialog = false },
-                onSave = { name, amount, category, dueDay, reminderDays, notes, billingCycle, startMonthYear, isVariable ->
+                onSave = { name, amount, category, dueDay, reminderDays, notes, billingCycle, startMonthYear, isVariable, status ->
                     if (selectedBillForEdit == null) {
-                        viewModel.addBill(name, amount, category, dueDay, reminderDays, notes, billingCycle, startMonthYear, isVariable)
+                        viewModel.addBill(name, amount, category, dueDay, reminderDays, notes, billingCycle, startMonthYear, isVariable, status)
                     } else {
                         val updated = selectedBillForEdit!!.copy(
                             name = name,
@@ -321,7 +359,8 @@ fun BillsScreen(
                             notes = notes,
                             billingCycle = billingCycle,
                             startMonthYear = startMonthYear,
-                            isVariable = isVariable
+                            isVariable = isVariable,
+                            status = status
                         )
                         viewModel.updateBill(updated)
                     }
@@ -466,20 +505,30 @@ fun BillsScreen(
 @Composable
 fun BillRowItem(
     bill: Bill,
+    selectedMonthYear: String,
     onEditClick: () -> Unit,
     onDeleteClick: () -> Unit,
+    onStatusChange: (String) -> Unit,
+    onSkipToggle: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var statusMenuExpanded by remember { mutableStateOf(false) }
+    val isSkippedThisMonth = bill.isSkippedForMonthYear(selectedMonthYear)
+
     Card(
         modifier = modifier
             .fillMaxWidth()
             .testTag("bill_card_${bill.id}"),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = if (bill.isEnded) {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+            } else {
+                MaterialTheme.colorScheme.surface
+            }
         ),
         border = BorderStroke(
             width = 1.dp,
-            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+            color = MaterialTheme.colorScheme.outline.copy(alpha = if (bill.isEnded) 0.15f else 0.3f)
         ),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
@@ -495,7 +544,10 @@ fun BillRowItem(
                     modifier = Modifier
                         .size(36.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                        .background(
+                            if (bill.isEnded) MaterialTheme.colorScheme.surfaceVariant
+                            else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -517,7 +569,7 @@ fun BillRowItem(
                             else -> Icons.Default.Receipt
                         },
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = if (bill.isEnded) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -525,20 +577,85 @@ fun BillRowItem(
                 Spacer(modifier = Modifier.width(10.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = bill.name,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
-                        ),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = bill.name,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = if (bill.isEnded) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+
+                        // Interactive Status Badge Dropdown
+                        Box {
+                            Surface(
+                                onClick = { statusMenuExpanded = true },
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (bill.isEnded) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFE8F5E9),
+                                contentColor = if (bill.isEnded) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF2E7D32),
+                                modifier = Modifier.testTag("bill_status_badge_${bill.id}")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .clip(CircleShape)
+                                            .background(if (bill.isEnded) Color.Gray else Color(0xFF4CAF50))
+                                    )
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Text(
+                                        text = if (bill.isEnded) "Ended" else "Active",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowDropDown,
+                                        contentDescription = "Status Menu",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+
+                            DropdownMenu(
+                                expanded = statusMenuExpanded,
+                                onDismissRequest = { statusMenuExpanded = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Active (Ongoing)") },
+                                    onClick = {
+                                        statusMenuExpanded = false
+                                        onStatusChange("Active")
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(16.dp))
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Ended (Completed / Paid Off)") },
+                                    onClick = {
+                                        statusMenuExpanded = false
+                                        onStatusChange("Ended")
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Flag, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(16.dp))
+                                    }
+                                )
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(4.dp))
-                    
+
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -555,7 +672,7 @@ fun BillRowItem(
                                 color = MaterialTheme.colorScheme.onSecondaryContainer
                             )
                         }
-                        
+
                         if (bill.isVariable) {
                             Box(
                                 modifier = Modifier
@@ -570,7 +687,7 @@ fun BillRowItem(
                                 )
                             }
                         }
-                        
+
                         if (bill.billingCycle == "One-time" || bill.billingCycle == "One-Time") {
                             Box(
                                 modifier = Modifier
@@ -582,6 +699,21 @@ fun BillRowItem(
                                     text = "One-time",
                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp, fontWeight = FontWeight.Bold),
                                     color = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                            }
+                        }
+
+                        if (isSkippedThisMonth) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "Skipped This Month",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp, fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -607,7 +739,7 @@ fun BillRowItem(
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp
                     ),
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = if (bill.isEnded) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(start = 8.dp)
                 )
             }
@@ -628,7 +760,7 @@ fun BillRowItem(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
             )
 
-            // Bottom Actions Row (Edit / Delete icon shortcuts)
+            // Bottom Actions Row (Edit / Delete icon shortcuts & Skip Month)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -657,6 +789,28 @@ fun BillRowItem(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
+                    if (bill.isActive) {
+                        TextButton(
+                            onClick = onSkipToggle,
+                            modifier = Modifier
+                                .height(28.dp)
+                                .testTag("skip_bill_${bill.id}"),
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isSkippedThisMonth) Icons.Default.Refresh else Icons.Default.Block,
+                                contentDescription = null,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (isSkippedThisMonth) "Unskip" else "Skip Month",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                color = if (isSkippedThisMonth) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                            )
+                        }
+                    }
+
                     IconButton(
                         onClick = onEditClick,
                         modifier = Modifier
@@ -789,7 +943,7 @@ fun AddEditBillDialog(
     bill: Bill?,
     defaultMonthYear: String,
     onDismiss: () -> Unit,
-    onSave: (String, Double, String, Int, Int, String, String, String, Boolean) -> Unit
+    onSave: (String, Double, String, Int, Int, String, String, String, Boolean, String) -> Unit
 ) {
     var name by remember { mutableStateOf(bill?.name ?: "") }
     var amountStr by remember { mutableStateOf(bill?.amount?.let { if (it == 0.0) "" else it.toString() } ?: "") }
@@ -800,6 +954,7 @@ fun AddEditBillDialog(
     var billingCycle by remember { mutableStateOf(bill?.billingCycle ?: "Monthly") }
     var startMonthYear by remember { mutableStateOf(bill?.startMonthYear?.ifBlank { defaultMonthYear } ?: defaultMonthYear) }
     var isVariable by remember { mutableStateOf(bill?.isVariable ?: false) }
+    var status by remember { mutableStateOf(bill?.status ?: "Active") }
 
     var nameError by remember { mutableStateOf(false) }
     var amountError by remember { mutableStateOf(false) }
@@ -1129,6 +1284,55 @@ fun AddEditBillDialog(
                     }
                 }
 
+                // Lifecycle Status Dropdown
+                var statusExpanded by remember { mutableStateOf(false) }
+                ExposedDropdownMenuBox(
+                    expanded = statusExpanded,
+                    onExpandedChange = { statusExpanded = !statusExpanded },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        readOnly = true,
+                        value = if (status == "Ended") "Ended (Completed / Paid Off)" else "Active (Ongoing)",
+                        onValueChange = {},
+                        label = { Text("Bill Lifecycle Status") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = if (status == "Ended") Icons.Default.Flag else Icons.Default.CheckCircle,
+                                contentDescription = "Status",
+                                tint = if (status == "Ended") MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = statusExpanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                            .testTag("bill_status_dropdown"),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    ExposedDropdownMenu(
+                        expanded = statusExpanded,
+                        onDismissRequest = { statusExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Active (Ongoing)") },
+                            onClick = {
+                                status = "Active"
+                                statusExpanded = false
+                            },
+                            modifier = Modifier.testTag("status_option_active")
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Ended (Completed / Paid Off)") },
+                            onClick = {
+                                status = "Ended"
+                                statusExpanded = false
+                            },
+                            modifier = Modifier.testTag("status_option_ended")
+                        )
+                    }
+                }
+
                 // Notes Field
                 OutlinedTextField(
                     value = notes,
@@ -1156,7 +1360,7 @@ fun AddEditBillDialog(
                     amountError = !isAmountValid
 
                     if (isNameValid && isAmountValid) {
-                        onSave(name, amountVal, category, dueDay, reminderDays, notes, billingCycle, startMonthYear, isVariable)
+                        onSave(name, amountVal, category, dueDay, reminderDays, notes, billingCycle, startMonthYear, isVariable, status)
                     }
                 },
                 modifier = Modifier.testTag("save_bill_button")

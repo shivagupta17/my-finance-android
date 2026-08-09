@@ -262,7 +262,7 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
         billPayments,
         selectedMonthYear
     ) { billList, billPaymentList, monthYear ->
-        billList.filter { it.isDueInMonthYear(monthYear) || it.isPaidForMonthYear(monthYear) }.map { bill ->
+        billList.filter { it.isActive && (it.isDueInMonthYear(monthYear) || it.isPaidForMonthYear(monthYear)) }.map { bill ->
             if (bill.isPaidForMonthYear(monthYear)) {
                 val actualPayment = billPaymentList.find { bp ->
                     bp.billId == bill.id && bp.monthYear == monthYear
@@ -296,7 +296,7 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
     val outstandingBillsTotal: StateFlow<Double> = combine(bills, selectedMonthYear) { billList, monthYear ->
-        billList.filter { (it.isDueInMonthYear(monthYear) || it.isPaidForMonthYear(monthYear)) && !it.isPaidForMonthYear(monthYear) && !it.isSkippedForMonthYear(monthYear) }.map { it.amount }.sum()
+        billList.filter { it.isActive && (it.isDueInMonthYear(monthYear) || it.isPaidForMonthYear(monthYear)) && !it.isPaidForMonthYear(monthYear) && !it.isSkippedForMonthYear(monthYear) }.map { it.amount }.sum()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
     // Grouping stats
@@ -329,7 +329,8 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     val billsByMockCategory: StateFlow<Map<String, Double>> = bills.map { billList ->
-        billList.groupBy { it.category }
+        billList.filter { it.isActive }
+            .groupBy { it.category }
             .mapValues { entry ->
                 entry.value.map { it.amount }.sum()
             }
@@ -337,7 +338,7 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
 
 
     // BILL EVENTS
-    fun addBill(name: String, amount: Double, category: String, dueDay: Int, reminderDays: Int, notes: String, billingCycle: String = "Monthly", startMonthYear: String = "", isVariable: Boolean = false) {
+    fun addBill(name: String, amount: Double, category: String, dueDay: Int, reminderDays: Int, notes: String, billingCycle: String = "Monthly", startMonthYear: String = "", isVariable: Boolean = false, status: String = "Active") {
         viewModelScope.launch {
             val actualStart = startMonthYear.ifBlank { _selectedMonthYear.value }
             val bill = Bill(
@@ -349,12 +350,26 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
                 notes = notes,
                 billingCycle = billingCycle,
                 startMonthYear = actualStart,
-                isVariable = isVariable
+                isVariable = isVariable,
+                status = status
             )
             val id = repository.insertBill(bill)
-            // Schedule the alarm
+            // Schedule the alarm if active
             val createdBill = bill.copy(id = id.toInt())
-            ReminderScheduler.scheduleBillReminder(context, createdBill)
+            if (createdBill.isActive) {
+                ReminderScheduler.scheduleBillReminder(context, createdBill)
+            }
+        }
+    }
+
+    fun setBillStatus(bill: Bill, newStatus: String) {
+        viewModelScope.launch {
+            val updatedBill = bill.copy(status = newStatus)
+            repository.updateBill(updatedBill)
+            ReminderScheduler.cancelBillReminder(context, bill)
+            if (updatedBill.isActive) {
+                ReminderScheduler.scheduleBillReminder(context, updatedBill)
+            }
         }
     }
 
