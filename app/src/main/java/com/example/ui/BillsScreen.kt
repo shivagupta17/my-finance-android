@@ -286,7 +286,7 @@ fun BillsScreen(
                                         modifier = Modifier.padding(end = 8.dp)
                                     )
                                     HorizontalDivider(
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
                                         thickness = 1.dp,
                                         modifier = Modifier.weight(1f)
                                     )
@@ -528,7 +528,7 @@ fun BillRowItem(
         ),
         border = BorderStroke(
             width = 1.dp,
-            color = MaterialTheme.colorScheme.outline.copy(alpha = if (bill.isEnded) 0.15f else 0.3f)
+            color = if (bill.isEnded) MaterialTheme.colorScheme.outlineVariant else MaterialTheme.colorScheme.outline
         ),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
@@ -757,7 +757,8 @@ fun BillRowItem(
 
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = 8.dp),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
+                color = MaterialTheme.colorScheme.outlineVariant,
+                thickness = 1.dp
             )
 
             // Bottom Actions Row (Edit / Delete icon shortcuts & Skip Month)
@@ -856,7 +857,7 @@ fun BillPaymentRowItem(
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         shape = RoundedCornerShape(16.dp)
     ) {
         Row(
@@ -869,13 +870,13 @@ fun BillPaymentRowItem(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFFE8F5E9)),
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.Check,
                     contentDescription = null,
-                    tint = Color(0xFF4CAF50),
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -1417,12 +1418,38 @@ fun RecordVariablePaymentDialog(
                         amountError = parsed == null || parsed < 0.0
                     },
                     label = { Text("Amount Paid (₹)") },
+                    placeholder = { Text("Enter 0 if zero dues this cycle") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     isError = amountError,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().testTag("variable_pay_input"),
                     shape = RoundedCornerShape(12.dp)
                 )
+
+                // Quick zero amount chip for credit cards with 0 dues
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    SuggestionChip(
+                        onClick = {
+                            amountText = "0"
+                            amountError = false
+                        },
+                        label = { Text("₹0 (Zero Dues)") },
+                        modifier = Modifier.testTag("zero_dues_chip")
+                    )
+                    if (bill.amount > 0.0) {
+                        SuggestionChip(
+                            onClick = {
+                                amountText = bill.amount.toString()
+                                amountError = false
+                            },
+                            label = { Text("₹${bill.amount.toInt()} (Estimated)") },
+                            modifier = Modifier.testTag("estimated_dues_chip")
+                        )
+                    }
+                }
             }
         },
         confirmButton = {

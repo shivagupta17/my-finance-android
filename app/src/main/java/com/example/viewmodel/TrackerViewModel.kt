@@ -1,6 +1,8 @@
 package com.example.viewmodel
 
 import android.app.Application
+import android.app.NotificationManager
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.db.AppDatabase
@@ -8,8 +10,11 @@ import com.example.data.model.Bill
 import com.example.data.model.Subscription
 import com.example.data.model.SubscriptionPayment
 import com.example.data.model.BillPayment
+import com.example.data.model.Expense
 import com.example.data.repository.TrackerRepository
 import com.example.receiver.ReminderScheduler
+import com.example.widget.AddExpenseWidgetProvider
+import com.example.widget.GlanceBillWidgetProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.json.JSONObject
 import org.json.JSONArray
@@ -82,8 +87,26 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
             database.billDao(),
             database.subscriptionDao(),
             database.subscriptionPaymentDao(),
-            database.billPaymentDao()
+            database.billPaymentDao(),
+            database.expenseDao()
         )
+
+        // Automatically update the home screen widget whenever database content changes
+        viewModelScope.launch {
+            combine(
+                repository.allBills,
+                repository.allSubscriptions,
+                repository.allBillPayments,
+                repository.allExpenses
+            ) { _, _, _, _ -> }
+                .collect {
+                    try {
+                        com.example.widget.GlanceBillWidgetProvider.triggerUpdate(application)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+        }
     }
 
     // Raw database flows
@@ -109,6 +132,13 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
         )
 
     val billPayments: StateFlow<List<BillPayment>> = repository.allBillPayments
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val expenses: StateFlow<List<Expense>> = repository.allExpenses
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -436,6 +466,11 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
             // Reschedule reminders for upcoming cycle if paid
             ReminderScheduler.cancelBillReminder(context, updatedBill)
             ReminderScheduler.scheduleBillReminder(context, updatedBill)
+
+            // Dismiss any existing notification for this bill
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+            notificationManager?.cancel(bill.id * 2)
+            notificationManager?.cancel(10000 + bill.id)
         }
     }
 
@@ -561,6 +596,11 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
             if (updatedSub.isActive && updatedSub.isAutoNotify) {
                 ReminderScheduler.scheduleSubscriptionReminder(context, updatedSub)
             }
+
+            // Dismiss any existing notification for this subscription
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+            notificationManager?.cancel(subscription.id * 2 + 1)
+            notificationManager?.cancel(20000 + subscription.id)
         }
     }
 
@@ -661,10 +701,16 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
                 skippedList.remove(monthYear)
                 val updatedSkippedMonths = skippedList.filter { it.isNotEmpty() }.joinToString(",")
 
-                repository.updateBill(dbBill.copy(
+                val updatedBill = dbBill.copy(
                     paidMonths = updatedPaidMonths,
                     skippedMonths = updatedSkippedMonths
-                ))
+                )
+                repository.updateBill(updatedBill)
+                ReminderScheduler.cancelBillReminder(context, updatedBill)
+                ReminderScheduler.scheduleBillReminder(context, updatedBill)
+                val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                notificationManager?.cancel(dbBill.id * 2)
+                notificationManager?.cancel(10000 + dbBill.id)
             }
             val payment = BillPayment(
                 billId = dbBill.id,
@@ -685,6 +731,11 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
             if (overwrite) {
                 repository.deleteSubscriptionPaymentBySubIdAndMonth(dbSub.id, monthYear)
             }
+
+            // Dismiss any existing notification for this subscription
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            notificationManager?.cancel(dbSub.id * 2 + 1)
+            notificationManager?.cancel(20000 + dbSub.id)
 
             // If historical payment date corresponds to current renewal month-year or later, advance the due cycle
             var currentRenewal = dbSub.renewalDate
@@ -717,6 +768,54 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
                 category = dbSub.category
             )
             repository.insertPayment(payment)
+        }
+    }
+
+    // Expense CRUD APIs
+    fun addExpense(
+        title: String,
+        amount: Double,
+        date: Long,
+        category: String,
+        notes: String = ""
+    ) {
+        viewModelScope.launch {
+            val sdfMY = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+            val monthYear = sdfMY.format(Date(date))
+            val expense = Expense(
+                title = title.trim(),
+                amount = amount,
+                date = date,
+                monthYear = monthYear,
+                category = category.trim(),
+                notes = notes.trim()
+            )
+            repository.insertExpense(expense)
+            AddExpenseWidgetProvider.triggerUpdate(context)
+            GlanceBillWidgetProvider.triggerUpdate(context)
+        }
+    }
+
+    fun updateExpense(expense: Expense) {
+        viewModelScope.launch {
+            val sdfMY = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+            val updated = expense.copy(
+                title = expense.title.trim(),
+                monthYear = sdfMY.format(Date(expense.date)),
+                category = expense.category.trim(),
+                notes = expense.notes.trim()
+            )
+            repository.updateExpense(updated)
+            AddExpenseWidgetProvider.triggerUpdate(context)
+            GlanceBillWidgetProvider.triggerUpdate(context)
+        }
+    }
+
+    fun deleteExpense(expense: Expense) {
+        viewModelScope.launch {
+            repository.deleteExpense(expense)
+            AddExpenseWidgetProvider.triggerUpdate(context)
+            GlanceBillWidgetProvider.triggerUpdate(context)
         }
     }
 
@@ -800,6 +899,22 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
         }
         backupObj.put("subscriptionPayments", subPaymentsArray)
         
+        // Expenses
+        val expensesArray = JSONArray()
+        expenses.value.forEach { exp ->
+            val obj = JSONObject().apply {
+                put("id", exp.id)
+                put("title", exp.title)
+                put("amount", exp.amount)
+                put("date", exp.date)
+                put("monthYear", exp.monthYear)
+                put("category", exp.category)
+                put("notes", exp.notes)
+            }
+            expensesArray.put(obj)
+        }
+        backupObj.put("expenses", expensesArray)
+
         return backupObj.toString(4)
     }
 
@@ -911,6 +1026,24 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
                     }
                 }
                 
+                // Parse and insert Expenses
+                val expensesArray = backupObj.optJSONArray("expenses")
+                if (expensesArray != null) {
+                    for (i in 0 until expensesArray.length()) {
+                        val obj = expensesArray.getJSONObject(i)
+                        val exp = Expense(
+                            id = obj.getInt("id"),
+                            title = obj.getString("title"),
+                            amount = obj.getDouble("amount"),
+                            date = obj.getLong("date"),
+                            monthYear = obj.getString("monthYear"),
+                            category = obj.getString("category"),
+                            notes = obj.optString("notes", "")
+                        )
+                        repository.insertExpense(exp)
+                    }
+                }
+
                 onSuccess()
             } catch (e: Exception) {
                 onError(e.localizedMessage ?: "Failed to parse JSON backup.")

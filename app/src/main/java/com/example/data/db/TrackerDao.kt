@@ -10,6 +10,7 @@ import com.example.data.model.Bill
 import com.example.data.model.Subscription
 import com.example.data.model.SubscriptionPayment
 import com.example.data.model.BillPayment
+import com.example.data.model.Expense
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -80,6 +81,9 @@ interface SubscriptionPaymentDao {
     @Query("DELETE FROM subscription_payments WHERE subscriptionId = :subId AND monthYear = :monthYear")
     suspend fun deletePaymentsBySubIdAndMonth(subId: Int, monthYear: String)
 
+    @Query("SELECT * FROM subscription_payments")
+    suspend fun getAllPaymentsList(): List<SubscriptionPayment>
+
     @Query("DELETE FROM subscription_payments")
     suspend fun deleteAllPayments()
 }
@@ -88,6 +92,12 @@ interface SubscriptionPaymentDao {
 interface BillPaymentDao {
     @Query("SELECT * FROM bill_payments ORDER BY paymentDate DESC")
     fun getAllBillPayments(): Flow<List<BillPayment>>
+
+    @Query("SELECT * FROM bill_payments")
+    suspend fun getAllBillPaymentsList(): List<BillPayment>
+
+    @Query("SELECT * FROM bill_payments WHERE billId = :billId")
+    suspend fun getPaymentsForBill(billId: Int): List<BillPayment>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertBillPayment(payment: BillPayment): Long
@@ -103,5 +113,35 @@ interface BillPaymentDao {
 
     @Query("DELETE FROM bill_payments")
     suspend fun deleteAllBillPayments()
+}
+
+@Dao
+interface ExpenseDao {
+    @Query("SELECT * FROM expenses ORDER BY date DESC")
+    fun getAllExpenses(): Flow<List<Expense>>
+
+    @Query("SELECT * FROM expenses WHERE monthYear = :monthYear ORDER BY date DESC")
+    fun getExpensesByMonth(monthYear: String): Flow<List<Expense>>
+
+    @Query("SELECT * FROM expenses WHERE id = :id")
+    suspend fun getExpenseById(id: Int): Expense?
+
+    @Query("SELECT * FROM expenses")
+    suspend fun getAllExpensesList(): List<Expense>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertExpense(expense: Expense): Long
+
+    @Update
+    suspend fun updateExpense(expense: Expense)
+
+    @Delete
+    suspend fun deleteExpense(expense: Expense)
+
+    @Query("DELETE FROM expenses WHERE id = :id")
+    suspend fun deleteExpenseById(id: Int)
+
+    @Query("DELETE FROM expenses")
+    suspend fun deleteAllExpenses()
 }
 

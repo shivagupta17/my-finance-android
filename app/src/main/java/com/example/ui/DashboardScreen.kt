@@ -30,6 +30,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.viewmodel.TrackerViewModel
 import com.example.viewmodel.UpcomingPaymentItem
+import com.example.ui.components.ObsidianSpendHero
+import com.example.ui.components.TactileBillItem
+import com.example.ui.theme.ObsidianTokens
+import com.example.ui.theme.bounceClick
+import com.example.ui.theme.specularBorder
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -41,12 +46,35 @@ fun HomeScreen(
     viewModel: TrackerViewModel,
     onNavigateToBills: () -> Unit,
     onNavigateToSubs: () -> Unit,
+    onNavigateToExpenses: () -> Unit = {},
+    onNavigateToDashboard: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val upcomingPayments by viewModel.upcomingPayments.collectAsState()
     val completedPayments by viewModel.completedPayments.collectAsState()
     val selectedMonthYear by viewModel.selectedMonthYear.collectAsState()
+    val billPayments by viewModel.billPayments.collectAsState()
+    val subPayments by viewModel.payments.collectAsState()
+    val expenses by viewModel.expenses.collectAsState()
     
+    val totalSpentBill = remember(billPayments, selectedMonthYear) {
+        billPayments.filter { it.monthYear == selectedMonthYear }.sumOf { it.amount }
+    }
+    val totalSpentSub = remember(subPayments, selectedMonthYear) {
+        val sdfMY = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+        subPayments.filter {
+            try {
+                sdfMY.format(Date(it.paymentDate)) == selectedMonthYear
+            } catch (e: Exception) {
+                false
+            }
+        }.sumOf { it.amount }
+    }
+    val totalSpentExpense = remember(expenses, selectedMonthYear) {
+        expenses.filter { it.monthYear == selectedMonthYear }.sumOf { it.amount }
+    }
+    val totalSpentOverall = totalSpentBill + totalSpentSub + totalSpentExpense
+
     var dashboardListTab by remember { mutableStateOf("Pending") } // "Pending", "Paid"
     var billToPayInput by remember { mutableStateOf<com.example.data.model.Bill?>(null) }
 
@@ -67,21 +95,49 @@ fun HomeScreen(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Your Financial Cockpit",
+                        text = "Financial Cockpit",
                         style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.Black,
                             letterSpacing = (-0.5).sp
                         ),
-                        color = MaterialTheme.colorScheme.onBackground
+                        color = ObsidianTokens.TextPrimary
                     )
                     Text(
                         text = SimpleDateFormat("EEEE, d MMMM yyyy", Locale.getDefault()).format(Date()),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                        style = ObsidianTokens.MicroLabel.copy(
+                            color = ObsidianTokens.TextSecondary,
+                            letterSpacing = 0.5.sp,
+                            fontWeight = FontWeight.Normal
+                        )
                     )
                 }
                 
                 MonthSelector(viewModel = viewModel)
+            }
+        }
+
+        // OBSIDIAN SPEND HERO
+        item {
+            var showMonthPicker by remember { mutableStateOf(false) }
+
+            ObsidianSpendHero(
+                selectedMonthYear = selectedMonthYear,
+                totalSpentOverall = totalSpentOverall,
+                totalSpentBill = totalSpentBill,
+                totalSpentSub = totalSpentSub,
+                totalSpentExpense = totalSpentExpense,
+                onMonthSelectorClick = { showMonthPicker = true },
+                onViewAnalyticsClick = onNavigateToDashboard
+            )
+
+            if (showMonthPicker) {
+                MonthYearPickerDialog(
+                    initialMonthYear = selectedMonthYear,
+                    onDismissRequest = { showMonthPicker = false },
+                    onMonthYearSelected = { newMonthYear, _ ->
+                        viewModel.selectMonthYear(newMonthYear)
+                    }
+                )
             }
         }
 
@@ -99,20 +155,43 @@ fun HomeScreen(
                     listOf("Pending", "Paid").forEach { tab ->
                         val isSelected = dashboardListTab == tab
                         val count = if (tab == "Pending") upcomingPayments.size else completedPayments.size
-                        ElevatedFilterChip(
-                            selected = isSelected,
-                            onClick = { dashboardListTab = tab },
-                            label = { Text("$tab ($count)") },
-                            modifier = Modifier.testTag("dashboard_tab_$tab")
-                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(100.dp))
+                                .background(
+                                    if (isSelected) ObsidianTokens.AccentMint.copy(alpha = 0.15f)
+                                    else ObsidianTokens.GlassSurface.copy(alpha = 0.85f)
+                                )
+                                .specularBorder(
+                                    shape = RoundedCornerShape(100.dp),
+                                    borderWidth = 1.dp,
+                                    alphaTop = if (isSelected) 0.35f else 0.18f,
+                                    alphaBottom = 0.04f
+                                )
+                                .bounceClick(scaleDown = 0.94f) { dashboardListTab = tab }
+                                .padding(horizontal = 14.dp, vertical = 7.dp)
+                                .testTag("dashboard_tab_$tab"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "$tab ($count)",
+                                style = ObsidianTokens.MicroLabel.copy(
+                                    fontSize = 11.sp,
+                                    letterSpacing = 0.6.sp,
+                                    color = if (isSelected) ObsidianTokens.AccentMint else ObsidianTokens.TextSecondary
+                                )
+                            )
+                        }
                     }
                 }
 
-                // Small calendar/clock tag
                 Text(
-                    text = "Schedules",
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.primary
+                    text = "SCHEDULES",
+                    style = ObsidianTokens.MicroLabel.copy(
+                        fontSize = 11.sp,
+                        letterSpacing = 1.8.sp,
+                        color = ObsidianTokens.TextMuted
+                    )
                 )
             }
         }
@@ -214,37 +293,44 @@ fun MonthSelector(
     val currentLabel = options.find { it.first == selectedMonthYear }?.second ?: selectedMonthYear
 
     Box(modifier = modifier) {
-        Card(
-            onClick = { showPicker = true },
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
-            ),
-            shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
-            modifier = Modifier.testTag("month_selector_button")
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(100.dp))
+                .background(ObsidianTokens.GlassSurface.copy(alpha = 0.85f))
+                .specularBorder(
+                    shape = RoundedCornerShape(100.dp),
+                    borderWidth = 1.dp,
+                    alphaTop = 0.20f,
+                    alphaBottom = 0.04f
+                )
+                .bounceClick(scaleDown = 0.94f) { showPicker = true }
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .testTag("month_selector_button"),
+            contentAlignment = Alignment.Center
         ) {
             Row(
-                modifier = Modifier
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.CalendarMonth,
                     contentDescription = "Select Month",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp)
+                    tint = ObsidianTokens.TextSecondary,
+                    modifier = Modifier.size(16.dp)
                 )
                 Text(
                     text = currentLabel,
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    style = ObsidianTokens.MicroLabel.copy(
+                        fontSize = 11.sp,
+                        letterSpacing = 0.5.sp,
+                        color = ObsidianTokens.TextPrimary
+                    )
                 )
                 Icon(
                     imageVector = Icons.Default.ArrowDropDown,
                     contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    modifier = Modifier.size(16.dp),
+                    tint = ObsidianTokens.TextSecondary
                 )
             }
         }
@@ -269,256 +355,14 @@ fun UpcomingPaymentRow(
     onSkipToggle: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val isBill = item.itemType == "BILL"
-    val isOverdue = item.isOverdue
-
-    Card(
+    TactileBillItem(
+        item = item,
+        isPaidMode = isPaidMode,
+        onPayClick = onPayToggle,
+        onSkipClick = onSkipToggle,
+        onCardClick = onPayToggle,
         modifier = modifier
-            .fillMaxWidth()
-            .testTag("upcoming_payment_row_${item.itemType}_${item.id}"),
-        colors = CardDefaults.cardColors(
-            containerColor = if (item.isSkipped) {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
-            } else if (isPaidMode) {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-            } else if (isOverdue) {
-                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
-        ),
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (item.isSkipped) {
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-            } else if (isPaidMode) {
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-            } else if (isOverdue) {
-                MaterialTheme.colorScheme.error.copy(alpha = 0.4f)
-            } else {
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-            }
-        ),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Priority Indicator / Color Theme Block
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        if (item.isSkipped) MaterialTheme.colorScheme.surfaceVariant
-                        else if (isPaidMode) Color(0xFFE8F5E9)
-                        else if (isOverdue) MaterialTheme.colorScheme.error.copy(alpha = 0.2f)
-                        else if (isBill) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                        else MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (item.isSkipped) Icons.Default.Close
-                    else if (isPaidMode) Icons.Default.CheckCircle
-                    else if (isOverdue) Icons.Default.Warning
-                    else if (isBill) Icons.Default.Receipt
-                    else Icons.Default.CreditCard,
-                    contentDescription = item.itemType,
-                    tint = if (item.isSkipped) MaterialTheme.colorScheme.outline
-                    else if (isPaidMode) Color(0xFF4CAF50)
-                    else if (isOverdue) MaterialTheme.colorScheme.error
-                    else if (isBill) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            // Text Details
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = item.name,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-
-                    // Small Tag representation of Bill vs Sub
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(
-                                (if (isBill) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer).copy(alpha = 0.6f)
-                            )
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = if (isBill) "Bill" else "Sub",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                            color = if (isBill) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    }
-                }
-
-                Text(
-                    text = item.extraInfo,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // Days Counter Text Badge
-                Text(
-                    text = when {
-                        item.isSkipped -> "Skipped"
-                        isPaidMode -> "Payment Recorded"
-                        isOverdue -> {
-                            val parent = item.parentItem
-                            if (isBill && parent is com.example.data.model.Bill) {
-                                "Overdue (Due on Day ${parent.dueDay})"
-                            } else {
-                                "Overdue"
-                            }
-                        }
-                        item.daysRemaining == 0 -> "Due today!"
-                        item.daysRemaining == 1 -> "Due tomorrow"
-                        isBill && item.parentItem is com.example.data.model.Bill -> {
-                            val parent = item.parentItem as com.example.data.model.Bill
-                            "Due in ${item.daysRemaining} days (Day ${parent.dueDay})"
-                        }
-                        else -> "Due in ${item.daysRemaining} days"
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (item.isSkipped) MaterialTheme.colorScheme.outline else if (isPaidMode) Color(0xFF2E7D32) else if (isOverdue) MaterialTheme.colorScheme.error else if (item.daysRemaining <= 2) Color(0xFFFF9800) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // Amount and Action
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.Center
-            ) {
-                val parentItem = item.parentItem
-                val isVariableBill = isBill && parentItem is com.example.data.model.Bill && parentItem.isVariable
-                val costText = if (item.isSkipped) {
-                    "Skipped"
-                } else if (isVariableBill && item.amount <= 0.0) {
-                    "Variable"
-                } else {
-                    "₹${String.format("%.2f", item.amount)}"
-                }
-
-                Text(
-                    text = costText,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
-                    color = if (item.isSkipped) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                if (!isPaidMode) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (isBill) {
-                            TextButton(
-                                onClick = { onSkipToggle?.invoke() },
-                                modifier = Modifier
-                                    .height(32.dp)
-                                    .testTag("skip_button_${item.itemType}_${item.id}"),
-                                colors = ButtonDefaults.textButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.outline
-                                ),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "Skip",
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
-                                )
-                            }
-                        }
-
-                        TextButton(
-                            onClick = onPayToggle,
-                            modifier = Modifier
-                                .height(32.dp)
-                                .testTag("action_button_${item.itemType}_${item.id}"),
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = if (isBill) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
-                            ),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = if (isBill) "Pay" else "Mark Paid",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
-                            )
-                        }
-                    }
-                } else {
-                    if (isBill) {
-                        // For bills, they can unmark it paid too
-                        TextButton(
-                            onClick = {
-                                if (item.isSkipped) {
-                                    onSkipToggle?.invoke()
-                                } else {
-                                    onPayToggle()
-                                }
-                            },
-                            modifier = Modifier
-                                .height(32.dp)
-                                .testTag("unpay_button_${item.itemType}_${item.id}"),
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = if (item.isSkipped) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.error
-                            ),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                        ) {
-                            Text(
-                                text = if (item.isSkipped) "Unskip" else "Unpay",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
-                            )
-                        }
-                    } else {
-                        // For subscriptions, display checked sign
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = "Paid",
-                            tint = Color(0xFF4CAF50),
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -531,6 +375,7 @@ fun DashboardScreen(
     val subscriptions by viewModel.subscriptions.collectAsState()
     val billPayments by viewModel.billPayments.collectAsState()
     val subPayments by viewModel.payments.collectAsState()
+    val expenses by viewModel.expenses.collectAsState()
     val selectedMonthYear by viewModel.selectedMonthYear.collectAsState()
 
     var activePeriod by remember { mutableStateOf("Monthly") } // "Monthly", "Quarterly", "Yearly", "Lifetime", "Forecast"
@@ -605,23 +450,34 @@ fun DashboardScreen(
         }
     }
 
+    val periodExpenses = remember(expenses, targetMonthsForPeriod, activePeriod) {
+        if (activePeriod == "Lifetime") {
+            expenses
+        } else {
+            expenses.filter { targetMonthsForPeriod.contains(it.monthYear) }
+        }
+    }
+
     val totalSpentBill = periodBillPayments.sumOf { it.amount }
     val totalSpentSub = periodSubPayments.sumOf { it.amount }
-    val totalSpentOverall = totalSpentBill + totalSpentSub
+    val totalSpentExpense = periodExpenses.sumOf { it.amount }
+    val totalSpentOverall = totalSpentBill + totalSpentSub + totalSpentExpense
 
     // Group expenses by category
-    val expensesByCategory = remember(periodBillPayments, periodSubPayments) {
+    val expensesByCategory = remember(periodBillPayments, periodSubPayments, periodExpenses) {
         val groups = mutableMapOf<String, Double>()
         periodBillPayments.forEach { groups[it.category] = (groups[it.category] ?: 0.0) + it.amount }
         periodSubPayments.forEach { groups[it.category] = (groups[it.category] ?: 0.0) + it.amount }
+        periodExpenses.forEach { groups[it.category] = (groups[it.category] ?: 0.0) + it.amount }
         groups.toList().sortedByDescending { it.second }
     }
 
     // Combine item descriptions for detailed maximum expense list
-    val topExpensesList = remember(periodBillPayments, periodSubPayments) {
+    val topExpensesList = remember(periodBillPayments, periodSubPayments, periodExpenses) {
         val list = mutableListOf<Pair<String, Double>>()
         periodBillPayments.forEach { list.add(Pair(it.billName + " (Bill)", it.amount)) }
         periodSubPayments.forEach { list.add(Pair(it.subscriptionName + " (Sub)", it.amount)) }
+        periodExpenses.forEach { list.add(Pair(it.title + " (Expense)", it.amount)) }
         list.sortedByDescending { it.second }
     }
 
@@ -639,8 +495,8 @@ fun DashboardScreen(
         Color(0xFF70A1FF)  // Steel Blue
     )
 
-    // Calculate monthly trend data (bills + subscriptions) depending on the active analytics period
-    val periodTrendData = remember(billPayments, subPayments, activePeriod, targetMonthsForPeriod, dashboardYear, dashboardQuarter, selectedDate, selectedMonthYear) {
+    // Calculate monthly trend data (bills + subscriptions + expenses) depending on the active analytics period
+    val periodTrendData = remember(billPayments, subPayments, expenses, activePeriod, targetMonthsForPeriod, dashboardYear, dashboardQuarter, selectedDate, selectedMonthYear) {
         val sdfMName = SimpleDateFormat("MMM", Locale.getDefault())
         when (activePeriod) {
             "Monthly" -> {
@@ -655,7 +511,8 @@ fun DashboardScreen(
                         val pMY = sdfMY.format(Date(it.paymentDate))
                         pMY == labelMY
                     }.sumOf { it.amount }
-                    trend.add(Pair(displayLabel, billsTotal + subsTotal))
+                    val expensesTotal = expenses.filter { it.monthYear == labelMY }.sumOf { it.amount }
+                    trend.add(Pair(displayLabel, billsTotal + subsTotal + expensesTotal))
                     calTrend.add(Calendar.MONTH, 1)
                 }
                 trend
@@ -678,7 +535,8 @@ fun DashboardScreen(
                             val pMY = sdfMY.format(Date(it.paymentDate))
                             pMY == mY
                         }.sumOf { it.amount }
-                        trend.add(Pair(displayLabel, billsTotal + subsTotal))
+                        val expensesTotal = expenses.filter { it.monthYear == mY }.sumOf { it.amount }
+                        trend.add(Pair(displayLabel, billsTotal + subsTotal + expensesTotal))
                     }
                 }
                 trend
@@ -701,7 +559,8 @@ fun DashboardScreen(
                             val pMY = sdfMY.format(Date(it.paymentDate))
                             pMY == mY
                         }.sumOf { it.amount }
-                        trend.add(Pair(displayLabel, billsTotal + subsTotal))
+                        val expensesTotal = expenses.filter { it.monthYear == mY }.sumOf { it.amount }
+                        trend.add(Pair(displayLabel, billsTotal + subsTotal + expensesTotal))
                     }
                 }
                 trend
@@ -714,6 +573,9 @@ fun DashboardScreen(
                 subPayments.forEach {
                     val pMY = sdfMY.format(Date(it.paymentDate))
                     monthlyTotals[pMY] = (monthlyTotals[pMY] ?: 0.0) + it.amount
+                }
+                expenses.forEach {
+                    monthlyTotals[it.monthYear] = (monthlyTotals[it.monthYear] ?: 0.0) + it.amount
                 }
                 val sorted = monthlyTotals.keys.sorted().takeLast(6)
                 val trend = mutableListOf<Pair<String, Double>>()
@@ -736,7 +598,7 @@ fun DashboardScreen(
     }
 
     // Average monthly spending for historical comparison
-    val allPreviousMonthsSpending = remember(billPayments, subPayments, selectedMonthYear) {
+    val allPreviousMonthsSpending = remember(billPayments, subPayments, expenses, selectedMonthYear) {
         val monthlyTotals = mutableMapOf<String, Double>()
         billPayments.filter { it.monthYear != selectedMonthYear }.forEach {
             monthlyTotals[it.monthYear] = (monthlyTotals[it.monthYear] ?: 0.0) + it.amount
@@ -746,6 +608,9 @@ fun DashboardScreen(
             if (pMY != selectedMonthYear) {
                 monthlyTotals[pMY] = (monthlyTotals[pMY] ?: 0.0) + it.amount
             }
+        }
+        expenses.filter { it.monthYear != selectedMonthYear }.forEach {
+            monthlyTotals[it.monthYear] = (monthlyTotals[it.monthYear] ?: 0.0) + it.amount
         }
         if (monthlyTotals.isEmpty()) 0.0 else monthlyTotals.values.average()
     }
@@ -780,6 +645,15 @@ fun DashboardScreen(
                     b.amount
                 }
                 list.add(Pair(b.name + " (Bill)", predictedAmount))
+            }
+        }
+
+        // Include historical discretionary daily expense average
+        val pastExpensesByMonth = expenses.groupBy { it.monthYear }
+        if (pastExpensesByMonth.isNotEmpty()) {
+            val avgPastExpense = pastExpensesByMonth.values.map { l -> l.sumOf { it.amount } }.average()
+            if (avgPastExpense > 0) {
+                list.add(Pair("Estimated Expenses (Avg)", avgPastExpense))
             }
         }
         list.sortedByDescending { it.second }
@@ -851,9 +725,9 @@ fun DashboardScreen(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                     shape = RoundedCornerShape(16.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                 ) {
                     Row(
                         modifier = Modifier
@@ -1035,6 +909,7 @@ fun DashboardScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
@@ -1072,6 +947,138 @@ fun DashboardScreen(
                                 Text("Subscriptions", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f))
                                 Text("₹${String.format("%,.2f", totalSpentSub)}", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.onPrimaryContainer)
                             }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("Expenses", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f))
+                                Text("₹${String.format("%,.2f", totalSpentExpense)}", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // SPENDING STRUCTURE & VELOCITY
+            item {
+                val recurringTotal = totalSpentBill + totalSpentSub
+                val discretionaryTotal = totalSpentExpense
+                val recurringPercent = if (totalSpentOverall > 0) ((recurringTotal / totalSpentOverall) * 100).toInt() else 0
+                val discretionaryPercent = if (totalSpentOverall > 0) (100 - recurringPercent) else 0
+                val currentDayOfMonth = Calendar.getInstance().get(Calendar.DAY_OF_MONTH).coerceAtLeast(1)
+                val dailySpendVelocity = totalSpentOverall / currentDayOfMonth
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                ) {
+                    Column(modifier = Modifier.padding(18.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Spending Structure & Velocity",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Badge(containerColor = MaterialTheme.colorScheme.primaryContainer) {
+                                Text(
+                                    "₹${String.format(Locale.getDefault(), "%,.0f", dailySpendVelocity)}/day",
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Visual Split Bar
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(10.dp)
+                                .clip(RoundedCornerShape(5.dp))
+                        ) {
+                            if (totalSpentOverall > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(recurringTotal.toFloat().coerceAtLeast(0.01f))
+                                        .fillMaxHeight()
+                                        .background(MaterialTheme.colorScheme.primary)
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .weight(discretionaryTotal.toFloat().coerceAtLeast(0.01f))
+                                        .fillMaxHeight()
+                                        .background(MaterialTheme.colorScheme.secondary)
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(MaterialTheme.colorScheme.outlineVariant)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primary)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    "Fixed Recurring ($recurringPercent%): ₹${String.format(Locale.getDefault(), "%,.2f", recurringTotal)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.secondary)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    "Discretionary ($discretionaryPercent%): ₹${String.format(Locale.getDefault(), "%,.2f", discretionaryTotal)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                            thickness = 1.dp
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                "Total Activity:",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                "${periodBillPayments.size} Bills Paid • ${periodSubPayments.size} Subs Paid • ${periodExpenses.size} Expenses Logged",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
@@ -1088,13 +1095,16 @@ fun DashboardScreen(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
                             containerColor = if (isOverspent) {
-                                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+                                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
                             } else {
-                                Color(0xFFE8F5E9)
+                                ObsidianTokens.AccentMint.copy(alpha = 0.12f)
                             }
                         ),
                         shape = RoundedCornerShape(16.dp),
-                        border = BorderStroke(1.dp, if (isOverspent) MaterialTheme.colorScheme.error.copy(alpha = 0.2f) else Color(0xFFC8E6C9))
+                        border = BorderStroke(
+                            1.dp,
+                            if (isOverspent) MaterialTheme.colorScheme.error.copy(alpha = 0.5f) else ObsidianTokens.AccentMint.copy(alpha = 0.45f)
+                        )
                     ) {
                         Row(
                             modifier = Modifier.padding(16.dp),
@@ -1103,7 +1113,7 @@ fun DashboardScreen(
                             Icon(
                                 imageVector = if (isOverspent) Icons.Default.TrendingUp else Icons.Default.TrendingDown,
                                 contentDescription = null,
-                                tint = if (isOverspent) MaterialTheme.colorScheme.error else Color(0xFF388E3C),
+                                tint = if (isOverspent) MaterialTheme.colorScheme.error else ObsidianTokens.AccentMint,
                                 modifier = Modifier.size(36.dp)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
@@ -1111,7 +1121,7 @@ fun DashboardScreen(
                                 Text(
                                     text = if (isOverspent) "Spending is up!" else "Spending is down!",
                                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = if (isOverspent) MaterialTheme.colorScheme.onErrorContainer else Color(0xFF1B5E20)
+                                    color = if (isOverspent) MaterialTheme.colorScheme.onErrorContainer else ObsidianTokens.AccentMint
                                 )
                                 Text(
                                     text = "You spent ₹${String.format("%,.2f", Math.abs(diff))} (${String.format("%.1f", Math.abs(percent))}%) ${if (isOverspent) "more" else "less"} than your historical monthly average (₹${String.format("%,.0f", allPreviousMonthsSpending)}).",
@@ -1138,7 +1148,8 @@ fun DashboardScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
                         Text(
@@ -1232,7 +1243,8 @@ fun DashboardScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
                         Text(
@@ -1279,7 +1291,10 @@ fun DashboardScreen(
                                         )
                                     }
                                     if (index < topExpensesList.size - 1 && index < 4) {
-                                        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                                        HorizontalDivider(
+                                            color = MaterialTheme.colorScheme.outlineVariant,
+                                            thickness = 1.dp
+                                        )
                                     }
                                 }
                             }
@@ -1293,7 +1308,8 @@ fun DashboardScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1330,7 +1346,8 @@ fun DashboardScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
                         Text(
@@ -1494,7 +1511,7 @@ fun TrendBarChart(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(

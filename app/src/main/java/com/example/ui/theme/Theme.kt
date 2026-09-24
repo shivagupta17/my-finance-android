@@ -8,47 +8,63 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-private val DarkColorScheme = darkColorScheme(
-  primary = Purple80,
-  onPrimary = OnPrimaryDark,
-  primaryContainer = PrimaryPurple,
-  onPrimaryContainer = PrimaryLight,
-  secondary = PurpleGrey80,
-  tertiary = Pink80,
-  background = Color(0xFF141218),
-  onBackground = Color(0xFFE6E1E5),
-  surface = Color(0xFF1D1B20),
-  onSurface = Color(0xFFE6E1E5),
-  surfaceVariant = Color(0xFF49454F),
-  onSurfaceVariant = Color(0xFFCAC4D0),
-  outline = Color(0xFF938F99)
+private val ObsidianDarkColorScheme = darkColorScheme(
+  primary = ObsidianDarkTokens.AccentMint,
+  onPrimary = Color(0xFF003822),
+  primaryContainer = Color(0xFF004D30),
+  onPrimaryContainer = ObsidianDarkTokens.AccentMint,
+  secondary = ObsidianDarkTokens.AccentBlue,
+  onSecondary = Color.White,
+  secondaryContainer = Color(0xFF1E283C),
+  onSecondaryContainer = Color(0xFFD6E3FF),
+  tertiary = ObsidianDarkTokens.AccentViolet,
+  onTertiary = Color.White,
+  background = ObsidianDarkTokens.Canvas,
+  onBackground = ObsidianDarkTokens.TextPrimary,
+  surface = ObsidianDarkTokens.GlassCard,
+  onSurface = ObsidianDarkTokens.TextPrimary,
+  surfaceVariant = ObsidianDarkTokens.GlassSurface,
+  onSurfaceVariant = ObsidianDarkTokens.TextSecondary,
+  outline = ObsidianDarkTokens.Outline,
+  outlineVariant = ObsidianDarkTokens.OutlineVariant,
+  error = ObsidianDarkTokens.AccentCrimson,
+  onError = Color.White,
+  errorContainer = Color(0xFF5A1020),
+  onErrorContainer = Color(0xFFFFD6DB)
 )
 
-private val LightColorScheme = lightColorScheme(
-  primary = PrimaryPurple,
+private val ObsidianLightColorScheme = lightColorScheme(
+  primary = ObsidianLightTokens.AccentMint,
   onPrimary = Color.White,
-  primaryContainer = PrimaryLight,
-  onPrimaryContainer = OnPrimaryDark,
-  secondary = PurpleGrey40,
+  primaryContainer = Color(0xFFD1F5E4),
+  onPrimaryContainer = Color(0xFF00452A),
+  secondary = ObsidianLightTokens.AccentBlue,
   onSecondary = Color.White,
-  tertiary = Pink40,
+  secondaryContainer = Color(0xFFDBEAFE),
+  onSecondaryContainer = Color(0xFF1E3A8A),
+  tertiary = ObsidianLightTokens.AccentViolet,
   onTertiary = Color.White,
-  background = BackgroundLight,
-  onBackground = TextDark,
-  surface = BackgroundLight,
-  onSurface = TextDark,
-  surfaceVariant = SurfaceVariantLight,
-  onSurfaceVariant = TextLightGrey,
-  outline = BorderGrey
+  background = ObsidianLightTokens.Canvas,
+  onBackground = ObsidianLightTokens.TextPrimary,
+  surface = ObsidianLightTokens.GlassCard,
+  onSurface = ObsidianLightTokens.TextPrimary,
+  surfaceVariant = ObsidianLightTokens.GlassSurface,
+  onSurfaceVariant = ObsidianLightTokens.TextSecondary,
+  outline = ObsidianLightTokens.Outline,
+  outlineVariant = ObsidianLightTokens.OutlineVariant,
+  error = ObsidianLightTokens.AccentCrimson,
+  onError = Color.White,
+  errorContainer = Color(0xFFFEE2E2),
+  onErrorContainer = Color(0xFF991B1B)
 )
 
 @Composable
 fun MyApplicationTheme(
-  darkTheme: Boolean = isSystemInDarkTheme(),
-  // Dynamic color is disabled by default to force the Professional Polish Theme
+  darkTheme: Boolean = true,
   dynamicColor: Boolean = false,
   content: @Composable () -> Unit,
 ) {
@@ -58,10 +74,11 @@ fun MyApplicationTheme(
         val context = LocalContext.current
         if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
       }
-
-      darkTheme -> DarkColorScheme
-      else -> LightColorScheme
+      darkTheme -> ObsidianDarkColorScheme
+      else -> ObsidianLightColorScheme
     }
 
-  MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
+  CompositionLocalProvider(LocalThemeIsDark provides darkTheme) {
+    MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
+  }
 }

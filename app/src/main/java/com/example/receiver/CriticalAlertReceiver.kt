@@ -118,6 +118,7 @@ class CriticalAlertReceiver : BroadcastReceiver() {
         val currentTime = System.currentTimeMillis()
 
         val bills = db.billDao().getAllBillsList()
+        val allBillPayments = db.billPaymentDao().getAllBillPaymentsList()
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
 
         // Create high importance alerts channel
@@ -136,23 +137,52 @@ class CriticalAlertReceiver : BroadcastReceiver() {
 
         bills.forEach { bill ->
             val isDue = bill.isDueInMonthYear(currentMonthYear)
-            val isPaid = bill.isPaidForMonthYear(currentMonthYear)
+            val isPaidInBill = bill.isPaidForMonthYear(currentMonthYear) || bill.isPaidThisMonth()
             val isSkipped = bill.isSkippedForMonthYear(currentMonthYear)
+            
+            // Check if there is an explicit payment record in bill payments table
+            val hasPaymentRecord = allBillPayments.any { payment ->
+                payment.billId == bill.id && (
+                    payment.monthYear == currentMonthYear ||
+                    SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date(payment.paymentDate)) == currentMonthYear ||
+                    (currentTime - payment.paymentDate) < (28L * 24 * 60 * 60 * 1000)
+                )
+            }
+
+            val isEffectivelyPaid = isPaidInBill || hasPaymentRecord
             val isDateReached = currentDay >= bill.dueDay
 
-            if (bill.isActive && isDue && !isPaid && !isSkipped && isDateReached) {
+            if (bill.isActive && isDue && !isEffectivelyPaid && !isSkipped && isDateReached) {
                 val isOverdue = currentDay > bill.dueDay
                 showCriticalNotification(context, notificationManager, bill.id, "BILL", bill.name, bill.amount, bill.isVariable, "Day ${bill.dueDay} of this month", isOverdue)
+            } else if (isEffectivelyPaid || isSkipped || !bill.isActive) {
+                // Bill is paid, skipped, or inactive: dismiss any active notification
+                notificationManager.cancel(10000 + bill.id)
+                notificationManager.cancel(bill.id * 2)
             }
         }
 
         // Check subscriptions
         val subscriptions = db.subscriptionDao().getAllSubscriptionsList()
+        val allSubPayments = db.subscriptionPaymentDao().getAllPaymentsList()
         subscriptions.forEach { sub ->
-            if (sub.isActive && currentTime >= sub.renewalDate) {
+            val isPaidInSub = sub.isPaidForMonthYear(currentMonthYear)
+            val hasPaymentRecord = allSubPayments.any { payment ->
+                payment.subscriptionId == sub.id && (
+                    SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date(payment.paymentDate)) == currentMonthYear ||
+                    (currentTime - payment.paymentDate) < (28L * 24 * 60 * 60 * 1000)
+                )
+            }
+            val isEffectivelyPaid = isPaidInSub || hasPaymentRecord
+
+            if (sub.isActive && sub.isAutoNotify && !isEffectivelyPaid && currentTime >= sub.renewalDate) {
                 val formattedDate = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(sub.renewalDate))
                 val isOverdue = currentTime > sub.renewalDate
                 showCriticalNotification(context, notificationManager, sub.id, "SUB", sub.name, sub.amount, false, formattedDate, isOverdue)
+            } else if (isEffectivelyPaid || !sub.isActive || !sub.isAutoNotify) {
+                // Subscription is paid, renewed, or inactive: dismiss any active notification
+                notificationManager.cancel(20000 + sub.id)
+                notificationManager.cancel(sub.id * 2 + 1)
             }
         }
     }
@@ -197,7 +227,7 @@ class CriticalAlertReceiver : BroadcastReceiver() {
         // Title and body message
         val title = if (isOverdue) "Overdue: $name" else "Due: $name"
         val itemLabel = if (itemType == "BILL") "bill" else "subscription"
-        val message = "Your $itemLabel of ₹${String.format("%.2f", amount)} is unpaid (Due date: $dueDateStr). Tap to manage."
+        val message = "Your $itemLabel of ₹${String.format(Locale.getDefault(), "%.2f", amount)} is unpaid (Due date: $dueDateStr). Tap to manage."
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
@@ -321,7 +351,12 @@ class CriticalAlertReceiver : BroadcastReceiver() {
             }
         }
 
-        // Dismiss notice
+        // Dismiss notice and regular reminder immediately
         notificationManager.cancel(notificationId)
+        if (itemType == "BILL") {
+            notificationManager.cancel(itemId * 2)
+        } else {
+            notificationManager.cancel(itemId * 2 + 1)
+        }
     }
 }

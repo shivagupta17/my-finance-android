@@ -4,17 +4,20 @@ import com.example.data.db.BillDao
 import com.example.data.db.SubscriptionDao
 import com.example.data.db.SubscriptionPaymentDao
 import com.example.data.db.BillPaymentDao
+import com.example.data.db.ExpenseDao
 import com.example.data.model.Bill
 import com.example.data.model.Subscription
 import com.example.data.model.SubscriptionPayment
 import com.example.data.model.BillPayment
+import com.example.data.model.Expense
 import kotlinx.coroutines.flow.Flow
 
 class TrackerRepository(
     private val billDao: BillDao,
     private val subscriptionDao: SubscriptionDao,
     private val subscriptionPaymentDao: SubscriptionPaymentDao,
-    private val billPaymentDao: BillPaymentDao
+    private val billPaymentDao: BillPaymentDao,
+    private val expenseDao: ExpenseDao
 ) {
     // Bills API
     val allBills: Flow<List<Bill>> = billDao.getAllBills()
@@ -67,10 +70,26 @@ class TrackerRepository(
     suspend fun deleteBillPaymentByBillIdAndMonth(billId: Int, monthYear: String) =
         billPaymentDao.deletePaymentsByBillIdAndMonth(billId, monthYear)
 
+    // Expenses API
+    val allExpenses: Flow<List<Expense>> = expenseDao.getAllExpenses()
+
+    fun getExpensesByMonth(monthYear: String): Flow<List<Expense>> = expenseDao.getExpensesByMonth(monthYear)
+
+    suspend fun getExpenseById(id: Int): Expense? = expenseDao.getExpenseById(id)
+
+    suspend fun insertExpense(expense: Expense): Long = expenseDao.insertExpense(expense)
+
+    suspend fun updateExpense(expense: Expense) = expenseDao.updateExpense(expense)
+
+    suspend fun deleteExpense(expense: Expense) = expenseDao.deleteExpense(expense)
+
+    suspend fun deleteExpenseById(id: Int) = expenseDao.deleteExpenseById(id)
+
     suspend fun clearAllData() {
         billDao.deleteAllBills()
         subscriptionDao.deleteAllSubscriptions()
         subscriptionPaymentDao.deleteAllPayments()
         billPaymentDao.deleteAllBillPayments()
+        expenseDao.deleteAllExpenses()
     }
 }

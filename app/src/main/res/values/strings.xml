@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">Bill &amp; Subscription Tracker</string>
+    <string name="widget_name">Bills &amp; Spending Glance</string>
+    <string name="widget_description">Quick overview of this month\'s spending and upcoming bills due in the next 3 to 7 days.</string>
+    <string name="widget_add_expense_name">Add New Expense</string>
+    <string name="widget_add_expense_desc">Instantly log daily spending and category expenses right from your home screen.</string>
 </resources>

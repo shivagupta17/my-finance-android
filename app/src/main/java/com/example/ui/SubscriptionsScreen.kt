@@ -249,7 +249,7 @@ fun SubscriptionsScreen(
                                         modifier = Modifier.padding(end = 8.dp)
                                     )
                                     HorizontalDivider(
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
                                         thickness = 1.dp,
                                         modifier = Modifier.weight(1f)
                                     )
@@ -497,9 +497,9 @@ fun SubscriptionRowItem(
         border = BorderStroke(
             width = 1.dp,
             color = when (status) {
-                "Paused" -> MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
-                "Cancelled" -> MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
-                else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                "Paused" -> MaterialTheme.colorScheme.outlineVariant
+                "Cancelled" -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                else -> MaterialTheme.colorScheme.outline
             }
         ),
         shape = RoundedCornerShape(12.dp)
@@ -674,7 +674,8 @@ fun SubscriptionRowItem(
 
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = 8.dp),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
+                color = MaterialTheme.colorScheme.outlineVariant,
+                thickness = 1.dp
             )
 
             // Bottom action row: Renewal Day vs configurations edit/delete
@@ -1198,7 +1199,7 @@ fun SubscriptionPaymentRowItem(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(
             width = 1.dp,
-            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+            color = MaterialTheme.colorScheme.outline
         ),
         shape = RoundedCornerShape(16.dp)
     ) {

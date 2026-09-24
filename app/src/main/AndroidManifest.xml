@@ -28,6 +28,39 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".widget.GlanceBillWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.action.UPDATE_GLANCE_WIDGET" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/glance_bill_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.AddExpenseWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_add_expense_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.action.UPDATE_EXPENSE_WIDGET" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/add_expense_widget_info" />
+        </receiver>
+
+        <activity
+            android:name=".ui.QuickAddExpenseActivity"
+            android:exported="true"
+            android:label="@string/widget_add_expense_name"
+            android:theme="@style/Theme.QuickAddDialog"
+            android:windowSoftInputMode="adjustResize" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

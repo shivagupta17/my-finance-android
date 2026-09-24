@@ -31,17 +31,29 @@ import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
+import com.example.ui.components.FloatingGlassNavBar
+import com.example.ui.theme.ObsidianTokens
+import com.example.ui.theme.bounceClick
+import com.example.ui.theme.specularBorder
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -57,6 +69,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -69,16 +82,41 @@ import com.example.ui.BillsScreen
 import com.example.ui.HomeScreen
 import com.example.ui.DashboardScreen
 import com.example.ui.SubscriptionsScreen
+import com.example.ui.ExpensesScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.viewmodel.TrackerViewModel
 
 class MainActivity : ComponentActivity() {
+  companion object {
+    const val EXTRA_TARGET_TAB = "extra_target_tab"
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
+    val initialTab = intent?.getStringExtra(EXTRA_TARGET_TAB) ?: "Home"
     setContent {
-      MyApplicationTheme {
-        MainAppContainer()
+      val context = LocalContext.current
+      val sharedPrefs = remember { context.getSharedPreferences("user_profile_prefs", Context.MODE_PRIVATE) }
+      val isSystemDark = isSystemInDarkTheme()
+      var themeMode by remember {
+        mutableStateOf(sharedPrefs.getString("app_theme_mode", "dark") ?: "dark")
+      }
+      val isDark = when (themeMode) {
+        "light" -> false
+        "system" -> isSystemDark
+        else -> true // default dark
+      }
+
+      MyApplicationTheme(darkTheme = isDark) {
+        MainAppContainer(
+          initialTab = initialTab,
+          themeMode = themeMode,
+          onThemeModeChanged = { newMode ->
+            themeMode = newMode
+            sharedPrefs.edit().putString("app_theme_mode", newMode).apply()
+          }
+        )
       }
     }
   }
@@ -110,7 +148,11 @@ fun getInitials(name: String): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainAppContainer() {
+fun MainAppContainer(
+  initialTab: String = "Home",
+  themeMode: String = "dark",
+  onThemeModeChanged: (String) -> Unit = {}
+) {
   val context = LocalContext.current
   val viewModel: TrackerViewModel = viewModel()
   
@@ -128,12 +170,12 @@ fun MainAppContainer() {
 
   var userName by remember {
     val initial = sharedPrefs.getString("user_name", "") ?: ""
-    mutableStateOf(if (initial.isBlank() && isRunningInTest) "Test User" else initial)
+    mutableStateOf(if (initial.isNotBlank()) initial else if (isRunningInTest) "Test User" else "User")
   }
-  var showOnboardingDialog by remember { mutableStateOf(userName.isBlank() && !isRunningInTest) }
+  var showOnboardingDialog by remember { mutableStateOf(false) }
   var showEditDialog by remember { mutableStateOf(false) }
   var showClearConfirmation by remember { mutableStateOf(false) }
-  var currentTab by remember { mutableStateOf("Home") }
+  var currentTab by remember { mutableStateOf(initialTab) }
 
   val exportBackupLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.CreateDocument("application/json")
@@ -223,7 +265,7 @@ fun MainAppContainer() {
     var errorText by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
-      onDismissRequest = { /* Force response to set name initially, or skip below */ },
+      onDismissRequest = { showOnboardingDialog = false },
       title = {
         Text(
           text = "Welcome to Bill Tracker!",
@@ -356,6 +398,51 @@ fun MainAppContainer() {
               style = MaterialTheme.typography.bodySmall,
               modifier = Modifier.padding(top = 8.dp)
             )
+          }
+
+          HorizontalDivider(
+            modifier = Modifier.padding(vertical = 16.dp),
+            color = MaterialTheme.colorScheme.outlineVariant
+          )
+
+          Text(
+            text = "Appearance & Theme",
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 8.dp)
+          )
+
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+          ) {
+            listOf(
+              Triple("dark", "Dark", Icons.Default.DarkMode),
+              Triple("light", "Light", Icons.Default.LightMode),
+              Triple("system", "System", Icons.Default.BrightnessAuto)
+            ).forEach { (mode, label, icon) ->
+              val isSelected = themeMode == mode
+              FilterChip(
+                selected = isSelected,
+                onClick = { onThemeModeChanged(mode) },
+                label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                leadingIcon = {
+                  Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                  )
+                },
+                colors = FilterChipDefaults.filterChipColors(
+                  selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                  selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                  containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                modifier = Modifier
+                  .weight(1f)
+                  .testTag("theme_chip_$mode")
+              )
+            }
           }
 
           HorizontalDivider(
@@ -500,7 +587,9 @@ fun MainAppContainer() {
         Button(
           onClick = {
             viewModel.clearAllData()
+            val currentTheme = sharedPrefs.getString("app_theme_mode", "dark") ?: "dark"
             sharedPrefs.edit().clear().apply()
+            sharedPrefs.edit().putString("app_theme_mode", currentTheme).apply()
             userName = ""
             currentTab = "Home"
             showClearConfirmation = false
@@ -530,111 +619,115 @@ fun MainAppContainer() {
 
   Scaffold(
     modifier = Modifier.fillMaxSize(),
+    containerColor = ObsidianTokens.Canvas,
     topBar = {
-      CenterAlignedTopAppBar(
-        title = {
-          Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-              text = when (currentTab) {
-                "Home" -> "Home Tracker"
-                "Dashboard" -> "Spend Analytics"
-                "Bills" -> "Bills Drawer"
-                else -> "Subscriptions"
-              },
-              style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-              color = MaterialTheme.colorScheme.onBackground
-            )
-            Text(
-              text = when (currentTab) {
-                "Home" -> "Financial Checklist & Actions"
-                "Dashboard" -> "Historical & Predictive Insights"
-                "Bills" -> "Track & Pay Priority Bills"
-                else -> "Manage Active Subscriptions"
-              },
-              style = MaterialTheme.typography.labelSmall,
-              color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-            )
-          }
-        },
-        navigationIcon = {
-          Box(
-            modifier = Modifier
-              .padding(start = 12.dp)
-              .size(36.dp)
-              .clip(CircleShape)
-              .background(color = Color(0xFFD0BCFF))
-              .clickable { showEditDialog = true }
-              .testTag("profile_initials_button"),
-            contentAlignment = Alignment.Center
-          ) {
-            Text(
-              text = getInitials(userName),
-              style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-              color = Color(0xFF21005D)
-            )
-          }
-        },
-        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-          containerColor = MaterialTheme.colorScheme.background
-        )
-      )
-    },
-    bottomBar = {
-      NavigationBar(
-        modifier = Modifier.testTag("bottom_nav_bar")
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .background(ObsidianTokens.Canvas)
       ) {
-        NavigationBarItem(
-          selected = currentTab == "Home",
-          onClick = { currentTab = "Home" },
-          label = { Text("Home") },
-          icon = {
-            Icon(
-              imageVector = Icons.Default.Home,
-              contentDescription = "Home Screen Trigger"
-            )
+        CenterAlignedTopAppBar(
+          title = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+              Text(
+                text = when (currentTab) {
+                  "Home" -> "Financial Cockpit"
+                  "Dashboard" -> "Spend Analytics"
+                  "Bills" -> "Bills Drawer"
+                  "Subscriptions" -> "Subscriptions"
+                  "Expenses" -> "Expenses & Spend"
+                  else -> "Tracker"
+                },
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = ObsidianTokens.TextPrimary
+              )
+              Text(
+                text = when (currentTab) {
+                  "Home" -> "OBSIDIAN VELOCITY & SCHEDULES"
+                  "Dashboard" -> "HISTORICAL & PREDICTIVE INSIGHTS"
+                  "Bills" -> "TRACK & SETTLE PRIORITY BILLS"
+                  "Subscriptions" -> "ACTIVE RECURRING SERVICES"
+                  "Expenses" -> "DAILY VARIABLE PURCHASES"
+                  else -> "PERSONAL FINANCE"
+                },
+                style = ObsidianTokens.MicroLabel.copy(
+                  fontSize = 10.sp,
+                  letterSpacing = 1.2.sp,
+                  color = ObsidianTokens.TextMuted
+                )
+              )
+            }
           },
-          modifier = Modifier.testTag("tab_home")
+          navigationIcon = {
+            Box(
+              modifier = Modifier
+                .padding(start = 12.dp)
+                .size(38.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(ObsidianTokens.AccentMint.copy(alpha = 0.14f))
+                .specularBorder(
+                  shape = RoundedCornerShape(12.dp),
+                  borderWidth = 1.dp,
+                  alphaTop = 0.35f,
+                  alphaBottom = 0.06f
+                )
+                .bounceClick(scaleDown = 0.92f) { showEditDialog = true }
+                .testTag("profile_initials_button"),
+              contentAlignment = Alignment.Center
+            ) {
+              Text(
+                text = getInitials(userName),
+                style = ObsidianTokens.TabularDigits.copy(
+                  fontWeight = FontWeight.Bold,
+                  fontSize = 13.sp,
+                  color = ObsidianTokens.AccentMint
+                )
+              )
+            }
+          },
+          actions = {
+            Box(
+              modifier = Modifier
+                .padding(end = 12.dp)
+                .size(38.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .specularBorder(
+                  shape = RoundedCornerShape(12.dp),
+                  borderWidth = 1.dp,
+                  alphaTop = 0.35f,
+                  alphaBottom = 0.08f
+                )
+                .bounceClick(scaleDown = 0.92f) {
+                  val nextMode = if (themeMode == "dark") "light" else "dark"
+                  onThemeModeChanged(nextMode)
+                }
+                .testTag("theme_toggle_button"),
+              contentAlignment = Alignment.Center
+            ) {
+              Icon(
+                imageVector = if (themeMode == "light") Icons.Default.DarkMode else Icons.Default.LightMode,
+                contentDescription = "Toggle Dark/Light Theme",
+                tint = ObsidianTokens.TextPrimary,
+                modifier = Modifier.size(19.dp)
+              )
+            }
+          },
+          colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+            containerColor = Color.Transparent
+          )
         )
-
-        NavigationBarItem(
-          selected = currentTab == "Dashboard",
-          onClick = { currentTab = "Dashboard" },
-          label = { Text("Dashboard") },
-          icon = {
-            Icon(
-              imageVector = Icons.Default.Dashboard,
-              contentDescription = "Dashboard Screen Trigger"
-            )
-          },
-          modifier = Modifier.testTag("tab_dashboard")
-        )
-
-        NavigationBarItem(
-          selected = currentTab == "Bills",
-          onClick = { currentTab = "Bills" },
-          label = { Text("Bills") },
-          icon = {
-            Icon(
-              imageVector = Icons.Default.ReceiptLong,
-              contentDescription = "Bills Screen Trigger"
-            )
-          },
-          modifier = Modifier.testTag("tab_bills")
-        )
-
-        NavigationBarItem(
-          selected = currentTab == "Subscriptions",
-          onClick = { currentTab = "Subscriptions" },
-          label = { Text("Subscriptions") },
-          icon = {
-            Icon(
-              imageVector = Icons.Default.Autorenew,
-              contentDescription = "Subscriptions Screen Trigger"
-            )
-          },
-          modifier = Modifier.testTag("tab_subscriptions")
+        HorizontalDivider(
+          color = MaterialTheme.colorScheme.outlineVariant,
+          thickness = 1.dp
         )
       }
+    },
+    bottomBar = {
+      FloatingGlassNavBar(
+        currentTab = currentTab,
+        onTabSelected = { currentTab = it }
+      )
     }
   ) { innerPadding ->
     val screenModifier = Modifier.padding(innerPadding)
@@ -644,6 +737,8 @@ fun MainAppContainer() {
         viewModel = viewModel,
         onNavigateToBills = { currentTab = "Bills" },
         onNavigateToSubs = { currentTab = "Subscriptions" },
+        onNavigateToExpenses = { currentTab = "Expenses" },
+        onNavigateToDashboard = { currentTab = "Dashboard" },
         modifier = screenModifier
       )
       "Dashboard" -> DashboardScreen(
@@ -655,6 +750,10 @@ fun MainAppContainer() {
         modifier = screenModifier
       )
       "Subscriptions" -> SubscriptionsScreen(
+        viewModel = viewModel,
+        modifier = screenModifier
+      )
+      "Expenses" -> ExpensesScreen(
         viewModel = viewModel,
         modifier = screenModifier
       )

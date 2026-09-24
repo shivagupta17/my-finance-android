@@ -52,6 +52,13 @@ data class Subscription(
         return calendar.timeInMillis
     }
 
+    // Check if the subscription has been paid/renewed past this monthYear
+    fun isPaidForMonthYear(monthYear: String): Boolean {
+        val sdf = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+        val renewalMonthYear = sdf.format(Date(renewalDate))
+        return renewalMonthYear > monthYear
+    }
+
     // Check if subscription has renewal due or occurs in a given monthYear ("yyyy-MM")
     fun isDueInMonthYear(monthYear: String): Boolean {
         if (!isActive) return false
